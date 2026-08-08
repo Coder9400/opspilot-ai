@@ -9,21 +9,44 @@ import { Response, NextFunction } from 'express';
 const router = Router();
 router.use(authenticate);
 
+/**
+ * Get all enquiry IDs that belong to a user (two-step approach).
+ * Supabase JS v2 cross-table .eq('joinedTable.column', value) is unreliable.
+ */
+async function getUserEnquiryIds(userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('enquiries')
+    .select('id')
+    .eq('user_id', userId);
+  assertNoDbError(error, 'Enquiry IDs');
+  return (data ?? []).map((r) => r.id as string);
+}
+
 // GET /api/quotations — all quotations for authenticated user's enquiries
 router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const userId = req.user!.id;
+
+    // Step 1: get user's enquiry IDs
+    const enquiryIds = await getUserEnquiryIds(userId);
+
+    if (enquiryIds.length === 0) {
+      sendSuccess(res, { quotations: [] });
+      return;
+    }
+
+    // Step 2: get quotations for those enquiries
     const { data, error } = await supabase
       .from('quotations')
       .select(`
         *,
-        enquiries!inner (
+        enquiries (
           customer_name,
           status,
-          priority,
-          user_id
+          priority
         )
       `)
-      .eq('enquiries.user_id', req.user!.id)
+      .in('enquiry_id', enquiryIds)
       .order('created_at', { ascending: false });
 
     assertNoDbError(error, 'Quotations');
@@ -50,7 +73,8 @@ router.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction) =
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row = data as Record<string, any>;
-    if (row.enquiries?.user_id !== req.user!.id) throw new ForbiddenError();
+    const enquiry = Array.isArray(row.enquiries) ? row.enquiries[0] : row.enquiries;
+    if (enquiry?.user_id !== req.user!.id) throw new ForbiddenError();
 
     sendSuccess(res, { quotation: rowToCamel(row) });
   } catch (err) {

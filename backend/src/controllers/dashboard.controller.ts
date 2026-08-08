@@ -15,7 +15,16 @@ export const DashboardController = {
     try {
       const userId = req.user!.id;
 
-      // Run all counts in parallel
+      // ── Step 1: Get enquiry IDs for this user ──────────────────────────────
+      // Using two-step approach because Supabase JS v2 cross-table
+      // .eq('joined_table.column', value) filters are unreliable.
+      const { data: enquiryRows } = await supabase
+        .from(T.ENQUIRIES)
+        .select('id')
+        .eq('user_id', userId);
+      const enquiryIds = (enquiryRows ?? []).map((r) => r.id as string);
+
+      // ── Step 2: Run all counts in parallel ─────────────────────────────────
       const [
         totalRes,
         newRes,
@@ -33,6 +42,7 @@ export const DashboardController = {
         pendingFollowUpsRes,
         completedFollowUpsRes,
       ] = await Promise.all([
+        // Enquiry status/priority counts — safe because we filter by user_id directly
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'NEW'),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'ANALYZING'),
@@ -43,29 +53,30 @@ export const DashboardController = {
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('priority', 'HIGH'),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('priority', 'MEDIUM'),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('priority', 'LOW'),
-        // Pending approvals for this user's enquiries
-        supabase.from(T.APPROVALS)
-          .select('*, enquiries!inner(user_id)', { count: 'exact', head: true })
-          .eq('enquiries.user_id', userId)
-          .eq('status', 'PENDING'),
-        supabase.from(T.QUOTATIONS)
-          .select('*, enquiries!inner(user_id)', { count: 'exact', head: true })
-          .eq('enquiries.user_id', userId),
-        supabase.from(T.QUOTATIONS)
-          .select('*, enquiries!inner(user_id)', { count: 'exact', head: true })
-          .eq('enquiries.user_id', userId)
-          .eq('status', 'APPROVED'),
-        supabase.from(T.FOLLOW_UPS)
-          .select('*, enquiries!inner(user_id)', { count: 'exact', head: true })
-          .eq('enquiries.user_id', userId)
-          .eq('status', 'PENDING'),
-        supabase.from(T.FOLLOW_UPS)
-          .select('*, enquiries!inner(user_id)', { count: 'exact', head: true })
-          .eq('enquiries.user_id', userId)
-          .eq('status', 'COMPLETED'),
+
+        // Child table counts — use .in(enquiryIds) when enquiries exist, else return 0
+        enquiryIds.length > 0
+          ? supabase.from(T.APPROVALS).select('*', { count: 'exact', head: true }).in('enquiry_id', enquiryIds).eq('status', 'PENDING')
+          : Promise.resolve({ count: 0, error: null }),
+
+        enquiryIds.length > 0
+          ? supabase.from(T.QUOTATIONS).select('*', { count: 'exact', head: true }).in('enquiry_id', enquiryIds)
+          : Promise.resolve({ count: 0, error: null }),
+
+        enquiryIds.length > 0
+          ? supabase.from(T.QUOTATIONS).select('*', { count: 'exact', head: true }).in('enquiry_id', enquiryIds).eq('status', 'APPROVED')
+          : Promise.resolve({ count: 0, error: null }),
+
+        enquiryIds.length > 0
+          ? supabase.from(T.FOLLOW_UPS).select('*', { count: 'exact', head: true }).in('enquiry_id', enquiryIds).eq('status', 'PENDING')
+          : Promise.resolve({ count: 0, error: null }),
+
+        enquiryIds.length > 0
+          ? supabase.from(T.FOLLOW_UPS).select('*', { count: 'exact', head: true }).in('enquiry_id', enquiryIds).eq('status', 'COMPLETED')
+          : Promise.resolve({ count: 0, error: null }),
       ]);
 
-      // Recent high-priority enquiries
+      // ── Recent high-priority items ─────────────────────────────────────────
       const { data: recentHighPriority } = await supabase
         .from(T.ENQUIRIES)
         .select('id, customer_name, ai_summary, status, priority, created_at')
@@ -84,13 +95,13 @@ export const DashboardController = {
       const pendingApprovals = pendingApprovalsRes.count ?? 0;
 
       sendSuccess(res, {
-        // ── Flat keys the frontend Dashboard KPI cards read ────────────────
+        // ── Flat keys the frontend Dashboard KPI cards read ──────────────────
         totalEnquiries,
         highPriority,
         pendingApprovals,
         followupsDue: pendingFollowUps,
 
-        // ── Detailed breakdown ─────────────────────────────────────────────
+        // ── Detailed breakdown ───────────────────────────────────────────────
         enquiries: {
           total: totalEnquiries,
           byStatus: {

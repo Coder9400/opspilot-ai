@@ -4,6 +4,16 @@ import { AuthError, ConflictError } from '../utils/errors';
 
 // ─── Auth Service (Supabase Auth) ─────────────────────────────────────────────
 
+/** Extract display name from user_metadata — handles multiple field names */
+function extractName(meta: Record<string, unknown>): string {
+  return (
+    (meta.fullName as string) ||
+    (meta.full_name as string) ||
+    (meta.name as string) ||
+    ''
+  );
+}
+
 export const AuthService = {
   // ── Register ───────────────────────────────────────────────────────────────
 
@@ -15,6 +25,7 @@ export const AuthService = {
         data: {
           name: input.name,
           fullName: input.name,
+          full_name: input.name,
           businessName: (input as Record<string, unknown>).businessName ?? '',
         },
       },
@@ -23,7 +34,8 @@ export const AuthService = {
     if (error) {
       if (
         error.message.toLowerCase().includes('already registered') ||
-        error.message.toLowerCase().includes('already exists')
+        error.message.toLowerCase().includes('already exists') ||
+        error.message.toLowerCase().includes('user already')
       ) {
         throw new ConflictError('An account with this email address already exists');
       }
@@ -46,13 +58,16 @@ export const AuthService = {
     }
 
     const meta = data.user.user_metadata ?? {};
+    const fullName = extractName(meta) || input.name;
+    const businessName = (meta.businessName as string) ?? (input as Record<string, unknown>).businessName ?? '';
+
     return {
       user: {
         id: data.user.id,
         email: data.user.email ?? input.email,
-        name: (meta.name as string) ?? input.name,
-        fullName: (meta.fullName as string) ?? input.name,
-        businessName: (meta.businessName as string) ?? '',
+        name: fullName,
+        fullName,
+        businessName,
       },
       token: data.session.access_token,
       requiresEmailConfirmation: false,
@@ -76,13 +91,18 @@ export const AuthService = {
     }
 
     const meta = data.user.user_metadata ?? {};
+    // Derive name from email prefix as fallback for users with no metadata
+    const emailPrefix = input.email.split('@')[0];
+    const fullName = extractName(meta) || emailPrefix;
+    const businessName = (meta.businessName as string) ?? '';
+
     return {
       user: {
         id: data.user.id,
         email: data.user.email ?? input.email,
-        name: (meta.name as string) ?? '',
-        fullName: (meta.fullName as string) ?? (meta.name as string) ?? '',
-        businessName: (meta.businessName as string) ?? '',
+        name: fullName,
+        fullName,
+        businessName,
       },
       token: data.session.access_token,
     };
@@ -96,11 +116,14 @@ export const AuthService = {
     if (data.user.id !== userId) throw new AuthError('Session mismatch');
 
     const meta = data.user.user_metadata ?? {};
+    const emailPrefix = (data.user.email ?? '').split('@')[0];
+    const fullName = extractName(meta) || emailPrefix;
+
     return {
       id: data.user.id,
       email: data.user.email ?? '',
-      name: (meta.name as string) ?? '',
-      fullName: (meta.fullName as string) ?? (meta.name as string) ?? '',
+      name: fullName,
+      fullName,
       businessName: (meta.businessName as string) ?? '',
     };
   },
