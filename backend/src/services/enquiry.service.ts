@@ -44,6 +44,27 @@ function shapeEnquiry(row: Record<string, any>) {
         }
       : null;
 
+  // Format the first quotation as a detailed string for the frontend DraftCard if it exists
+  const firstQuotation = Array.isArray(row.quotations) && row.quotations.length > 0 ? row.quotations[0] : null;
+  let generatedQuotation = null;
+  if (firstQuotation) {
+    const currency = firstQuotation.currency || 'INR';
+    
+    // Format items table
+    let itemsText = '';
+    if (Array.isArray(firstQuotation.items) && firstQuotation.items.length > 0) {
+      itemsText = 'Line Items:\n';
+      firstQuotation.items.forEach((item: any, i: number) => {
+        const qty = item.quantity || 1;
+        const up = item.unitPrice || 0;
+        const tot = item.total || (qty * up);
+        itemsText += `${i + 1}. ${item.description}\n   Qty: ${qty} x ${currency} ${Number(up).toLocaleString('en-IN')} = ${currency} ${Number(tot).toLocaleString('en-IN')}\n`;
+      });
+    }
+
+    generatedQuotation = `${firstQuotation.title || 'Quotation'}\n\n${firstQuotation.description || ''}\n\n${itemsText}\nSubtotal: ${currency} ${Number(firstQuotation.subtotal || 0).toLocaleString('en-IN')}\nTax: ${currency} ${Number(firstQuotation.tax || 0).toLocaleString('en-IN')}\nTotal: ${currency} ${Number(firstQuotation.total || 0).toLocaleString('en-IN')}\n\nNotes & Terms:\n${firstQuotation.notes || ''}`;
+  }
+
   return {
     ...base,
     // Aliases the frontend reads
@@ -53,6 +74,7 @@ function shapeEnquiry(row: Record<string, any>) {
     analysis,
     // Generated content aliases (camelCase already done by rowToCamel)
     generatedResponse: row.generated_response ?? null,
+    generatedQuotation,
   };
 }
 

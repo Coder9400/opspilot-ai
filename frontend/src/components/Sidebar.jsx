@@ -2,11 +2,12 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 const NAV_ITEMS = [
-  { id: 'dashboard',  label: 'Dashboard',  icon: '⬛', href: '/dashboard' },
-  { id: 'enquiries',  label: 'Enquiries',  icon: '📋', href: '/enquiries' },
-  { id: 'quotations', label: 'Quotations', icon: '📄', href: '/quotations' },
-  { id: 'followups',  label: 'Follow-ups', icon: '🔔', href: '/followups' },
-  { id: 'settings',   label: 'Settings',   icon: '⚙️', href: '/dashboard' },
+  { id: 'dashboard',           label: 'Dashboard',           icon: '⬛', href: '/dashboard' },
+  { id: 'enquiries',           label: 'Enquiries',           icon: '📋', href: '/enquiries' },
+  { id: 'quotations',          label: 'My Quotations',       icon: '📄', href: '/quotations' },
+  { id: 'received-quotations', label: 'Received Quotations', icon: '📥', href: '/received-quotations' },
+  { id: 'followups',           label: 'Follow-ups',          icon: '🔔', href: '/followups' },
+  { id: 'settings',            label: 'Settings',            icon: '⚙️', href: '/settings' },
 ]
 
 function getInitials(name = '') {
@@ -45,7 +46,9 @@ export default function Sidebar({ onClose }) {
   const getActiveId = () => {
     if (activePath.startsWith('/enquiries')) return 'enquiries'
     if (activePath.startsWith('/quotations')) return 'quotations'
+    if (activePath.startsWith('/received-quotations')) return 'received-quotations'
     if (activePath.startsWith('/followups')) return 'followups'
+    if (activePath.startsWith('/settings')) return 'settings'
     return 'dashboard'
   }
   const activeItem = getActiveId()

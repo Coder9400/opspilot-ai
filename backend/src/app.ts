@@ -8,6 +8,8 @@ import enquiryRoutes from './routes/enquiry.routes';
 import quotationRoutes from './routes/quotation.routes';
 import followUpRoutes from './routes/followup.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import companyRoutes from './routes/company.routes';
+import receivedQuotationsRoutes from './routes/received-quotations.routes';
 import { sendSuccess } from './utils/response';
 
 const app = express();
@@ -57,6 +59,8 @@ app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/quotations', quotationRoutes);
 app.use('/api/followups', followUpRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/company', companyRoutes);
+app.use('/api/received-quotations', receivedQuotationsRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
