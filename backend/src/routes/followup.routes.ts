@@ -35,7 +35,9 @@ router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
 
     const { data, error } = await query;
     assertNoDbError(error, 'Follow-ups');
-    sendSuccess(res, { followUps: rowsToCamel(data as Record<string, unknown>[]) });
+    const shaped = rowsToCamel(data as Record<string, unknown>[]);
+    // Return both keys: dashboard reads data.followups, other pages read data.followUps
+    sendSuccess(res, { followUps: shaped, followups: shaped });
   } catch (err) {
     next(err);
   }
