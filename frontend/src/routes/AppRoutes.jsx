@@ -5,6 +5,7 @@ import ProtectedRoute from '../components/ProtectedRoute'
 import Landing from '../pages/Landing'
 import Login from '../pages/Login'
 import Register from '../pages/Register'
+import SharedQuotation from '../pages/SharedQuotation'
 
 // Protected pages
 import Dashboard from '../pages/Dashboard'
@@ -14,6 +15,9 @@ import EnquiryDetail from '../pages/EnquiryDetail'
 import Quotations from '../pages/Quotations'
 import QuotationDetail from '../pages/QuotationDetail'
 import FollowUps from '../pages/FollowUps'
+import ReceivedQuotations from '../pages/ReceivedQuotations'
+import ReceivedQuotationDetail from '../pages/ReceivedQuotations/ReceivedQuotationDetail'
+import Settings from '../pages/Settings'
 
 export default function AppRoutes() {
   return (
@@ -23,6 +27,7 @@ export default function AppRoutes() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/quotations/shared/:token" element={<SharedQuotation />} />
 
         {/* Protected */}
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -32,6 +37,9 @@ export default function AppRoutes() {
         <Route path="/quotations" element={<ProtectedRoute><Quotations /></ProtectedRoute>} />
         <Route path="/quotations/:id" element={<ProtectedRoute><QuotationDetail /></ProtectedRoute>} />
         <Route path="/followups" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />
+        <Route path="/received-quotations" element={<ProtectedRoute><ReceivedQuotations /></ProtectedRoute>} />
+        <Route path="/received-quotations/:id" element={<ProtectedRoute><ReceivedQuotationDetail /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

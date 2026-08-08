@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase';
 import { RegisterInput, LoginInput } from '../validators/auth.validator';
 import { AuthError, ConflictError } from '../utils/errors';
+import { CompanyService } from './company.service';
 
 // ─── Auth Service (Supabase Auth) ─────────────────────────────────────────────
 
@@ -60,6 +61,13 @@ export const AuthService = {
     const meta = data.user.user_metadata ?? {};
     const fullName = extractName(meta) || input.name;
     const businessName = (meta.businessName as string) ?? (input as Record<string, unknown>).businessName ?? '';
+
+    // Auto-create company for new user
+    try {
+      await CompanyService.ensureCompany(data.user.id, data.user.email ?? input.email, businessName || fullName);
+    } catch (companyErr) {
+      console.warn('[Auth] Company auto-create failed (non-fatal):', (companyErr as Error).message);
+    }
 
     return {
       user: {
