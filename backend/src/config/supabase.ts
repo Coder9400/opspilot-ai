@@ -24,6 +24,8 @@ export function assertNoDbError(
   if (!error) return;
   console.error(`[DB] ${context}: ${error.code} — ${error.message}`);
   if (error.code === '42P01') throw new NotFoundError(context); // table not found
+  if (error.code === '22P02') throw new AppError('INVALID_ID', `Invalid ID format provided`, 400); // invalid UUID
+  if (error.code === 'PGRST116') throw new NotFoundError(context); // PostgREST not found (single row, no result)
   throw new AppError('DB_ERROR', `${context}: ${error.message}`, 500);
 }
 

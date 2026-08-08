@@ -30,15 +30,21 @@ export const receivedQuotationsService = {
       body: formData,
     })
 
+    const body = await res.json().catch(() => ({}))
+
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      const err = new Error(body.message || `Upload failed (${res.status})`)
+      // Backend sends: { success: false, error: { code: '...', message: '...' } }
+      // or sometimes just: { message: '...' }
+      const message = body?.error?.message || body?.message || `Upload failed (${res.status})`
+      const err = new Error(message)
       err.status = res.status
+      err.code = body?.error?.code
       throw err
     }
 
-    return res.json()
+    return body
   },
 }
 
 export default receivedQuotationsService
+

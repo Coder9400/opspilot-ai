@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { companyService } from '../../services/company.service'
+import { useAuth } from '../../hooks/useAuth'
 
 export default function Settings() {
+  const { user } = useAuth()
   const [tab, setTab] = useState('company')
   const [company, setCompany] = useState(null)
+  const [noCompany, setNoCompany] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
@@ -15,6 +18,7 @@ export default function Settings() {
         const data = await companyService.get()
         const c = data.company
         setCompany(c)
+        setNoCompany(false)
         setForm({
           name: c.name || '',
           email: c.email || '',
@@ -23,28 +27,48 @@ export default function Settings() {
           website: c.website || '',
         })
       } catch (err) {
-        setMessage({ type: 'error', text: err.message })
+        if (err.status === 404 || (err.message && err.message.includes('No company'))) {
+          // User needs to set up their company workspace
+          setNoCompany(true)
+          setForm({
+            name: user?.name || '',
+            email: user?.email || '',
+            phone: '',
+            address: '',
+            website: '',
+          })
+        } else {
+          setMessage({ type: 'error', text: err.message })
+        }
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [])
+  }, [user])
 
   const handleSave = async (e) => {
     e.preventDefault()
     setSaving(true)
     setMessage(null)
     try {
-      const result = await companyService.update(form)
+      let result
+      if (noCompany) {
+        result = await companyService.create(form)
+        setNoCompany(false)
+        setMessage({ type: 'success', text: '✓ Company workspace created! You can now upload quotations.' })
+      } else {
+        result = await companyService.update(form)
+        setMessage({ type: 'success', text: '✓ Company profile updated successfully.' })
+      }
       setCompany(result.company)
-      setMessage({ type: 'success', text: '✓ Company profile updated successfully.' })
     } catch (err) {
       setMessage({ type: 'error', text: err.message })
     } finally {
       setSaving(false)
     }
   }
+
 
   const tabs = [
     { key: 'company', label: '🏢 Company Profile' },
@@ -59,6 +83,17 @@ export default function Settings() {
           <p className="page-subtitle">Manage your company profile and integrations</p>
         </div>
       </div>
+
+      {/* ── No Company Banner ── */}
+      {noCompany && (
+        <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%)', borderRadius: '12px', padding: '1.5rem 2rem', marginBottom: '2rem', border: '1px solid rgba(99,102,241,0.3)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <span style={{ fontSize: '2rem' }}>🏢</span>
+          <div>
+            <div style={{ fontWeight: 700, color: '#fff', fontSize: '1.05rem', marginBottom: '0.25rem' }}>Set Up Your Company Workspace</div>
+            <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.875rem' }}>You need a company workspace to upload and manage quotations. Fill in your company details below and click Save to get started.</div>
+          </div>
+        </div>
+      )}
 
       {/* ── Tabs ── */}
       <div style={{ display: 'flex', gap: '0', borderBottom: '2px solid var(--border-color)', marginBottom: '2rem' }}>
@@ -111,7 +146,7 @@ export default function Settings() {
                     onChange={e => setForm(f => ({ ...f, website: e.target.value }))} placeholder="https://www.company.com" />
                 </div>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Changes'}
+                  {saving ? (noCompany ? 'Creating Workspace...' : 'Saving...') : (noCompany ? '🚀 Create Company Workspace' : 'Save Changes')}
                 </button>
               </form>
             </div>

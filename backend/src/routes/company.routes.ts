@@ -4,6 +4,7 @@ import { sendSuccess } from '../utils/response';
 import { AuthRequest } from '../types';
 import { CompanyService } from '../services/company.service';
 import { supabase, rowToCamel } from '../config/supabase';
+import { AppError } from '../utils/errors';
 
 const router = Router();
 router.use(authenticate);
@@ -14,18 +15,36 @@ router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
     const company = await CompanyService.getMyCompany(req.user!.id);
 
     if (!company) {
-      // Auto-create company from auth metadata
-      const { data: userData } = await supabase.auth.getUser();
-      const user = userData?.user;
-      const email = user?.email ?? req.user!.id;
-      const meta = user?.user_metadata ?? {};
-      const businessName = (meta.businessName as string) || (meta.full_name as string) || email.split('@')[0];
-      const created = await CompanyService.createCompany(req.user!.id, businessName, email);
-      sendSuccess(res, { company: created, created: true });
-      return;
+      // Do NOT auto-create here — this causes the constraint loop.
+      // Return a clear error so the frontend can guide users to onboarding.
+      throw new AppError(
+        'NO_COMPANY',
+        'No company workspace found. Please complete company setup.',
+        404
+      );
     }
 
     sendSuccess(res, { company });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/company — Create company for user (onboarding) ─────────────────
+router.post('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    // Only create if user doesn't already have one
+    const existing = await CompanyService.getMyCompany(req.user!.id);
+    if (existing) {
+      sendSuccess(res, { company: existing, created: false, message: 'Company already exists.' });
+      return;
+    }
+
+    const body = req.body as Record<string, string>;
+    const name = body.name?.trim() || body.businessName?.trim() || req.user!.email.split('@')[0] + ' Company';
+    const email = body.email || req.user!.email;
+    const created = await CompanyService.createCompany(req.user!.id, name, email);
+    sendSuccess(res, { company: created, created: true, message: 'Company workspace created.' });
   } catch (err) {
     next(err);
   }

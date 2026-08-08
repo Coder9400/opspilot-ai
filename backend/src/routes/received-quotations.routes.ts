@@ -28,21 +28,26 @@ router.use(authenticate);
 
 // ─── Helper: get company for user, throw if none ─────────────────────────────
 async function requireCompany(userId: string): Promise<string> {
-  let companyId = await CompanyService.getCompanyId(userId);
+  const companyId = await CompanyService.getCompanyId(userId);
   if (!companyId) {
-    // Auto-create company if user doesn't have one yet
-    const { data: userData } = await supabase.auth.getUser();
-    const email = userData?.user?.email ?? userId;
-    const company = await CompanyService.ensureCompany(userId, email);
-    companyId = (company as Record<string, unknown>).id as string;
+    throw new AppError('COMPANY_CONTEXT_ERROR', 'Unable to determine your company workspace. Please complete company onboarding.', 403);
   }
-  return companyId!;
+  return companyId;
 }
 
 // ─── GET /api/received-quotations ────────────────────────────────────────────
 router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const companyId = await requireCompany(req.user!.id);
+    const companyId = await CompanyService.getCompanyId(req.user!.id);
+
+    // If user has no company yet, return empty list — don't throw an error
+    if (!companyId) {
+      sendSuccess(res, { 
+        receivedQuotations: [],
+        message: 'No company workspace configured. Set up your company in Settings to get started.'
+      });
+      return;
+    }
 
     const { data, error } = await supabase
       .from('received_quotations')

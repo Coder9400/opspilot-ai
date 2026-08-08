@@ -2,12 +2,27 @@ import { supabase, assertNoDbError, rowToCamel } from '../config/supabase';
 import { AuthError } from '../utils/errors';
 
 // ─── Company Service ───────────────────────────────────────────────────────────
+// IMPORTANT: DB constraint on company_members.role accepts LOWERCASE: 'owner', 'admin', 'member'
+// The constraint was verified via live test — uppercase values are REJECTED.
+// Always use lowercase role values when inserting.
 
 export const CompanyService = {
 
   /** Create a new company and add the user as OWNER */
   async createCompany(userId: string, name: string, email?: string) {
-    // Create company
+    // First check if user already has a company membership to avoid duplicate violation
+    const existingCompanyId = await CompanyService.getCompanyId(userId);
+    if (existingCompanyId) {
+      // User already has a company, return it
+      const { data: company } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('id', existingCompanyId)
+        .single();
+      if (company) return rowToCamel(company as Record<string, unknown>);
+    }
+
+    // Create company record
     const { data: company, error: cErr } = await supabase
       .from('companies')
       .insert({ name, owner_id: userId, email: email ?? null })
@@ -18,12 +33,19 @@ export const CompanyService = {
 
     const companyId = (company as Record<string, unknown>).id as string;
 
-    // Add user as OWNER member
+    // Add user as owner member — DB CHECK constraint requires LOWERCASE 'owner'
     const { error: mErr } = await supabase
       .from('company_members')
-      .insert({ company_id: companyId, user_id: userId, role: 'OWNER' });
+      .insert({ company_id: companyId, user_id: userId, role: 'owner' });
 
-    assertNoDbError(mErr, 'Company member create');
+    if (mErr) {
+      console.error('[CompanyService] company_members insert error:', mErr.code, mErr.message);
+      // If duplicate — the membership may already exist (race condition), still return company
+      if (mErr.code === '23505') {
+        return rowToCamel(company as Record<string, unknown>);
+      }
+      assertNoDbError(mErr, 'Company member create');
+    }
 
     return rowToCamel(company as Record<string, unknown>);
   },
@@ -69,7 +91,7 @@ export const CompanyService = {
     const companyId = await CompanyService.getCompanyId(userId);
     if (!companyId) throw new AuthError('No company found for this user');
 
-    // Only the owner can update
+    // Only the owner or admin can update
     const { data: member } = await supabase
       .from('company_members')
       .select('role')
@@ -77,8 +99,9 @@ export const CompanyService = {
       .eq('user_id', userId)
       .single();
 
-    const role = (member as Record<string, unknown>)?.role;
-    if (role !== 'OWNER' && role !== 'ADMIN') {
+    // role is stored as lowercase in DB — normalize for comparison
+    const role = ((member as Record<string, unknown>)?.role as string)?.toLowerCase();
+    if (role !== 'owner' && role !== 'admin') {
       throw new AuthError('Only company owners can update company details');
     }
 
@@ -100,13 +123,17 @@ export const CompanyService = {
     return rowToCamel(data as Record<string, unknown>);
   },
 
-  /** Ensure company exists for user — create one from auth metadata if missing */
+  /**
+   * Ensure company exists for user.
+   * This is idempotent — safe to call multiple times.
+   * Only creates a company if the user has no membership.
+   */
   async ensureCompany(userId: string, email: string, businessName?: string) {
     const existing = await CompanyService.getMyCompany(userId);
     if (existing) return existing;
 
     // Auto-create company from businessName or email prefix
-    const name = businessName || email.split('@')[0] + ' Company';
+    const name = businessName?.trim() || email.split('@')[0] + ' Company';
     return CompanyService.createCompany(userId, name, email);
   },
 };
