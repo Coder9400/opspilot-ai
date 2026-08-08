@@ -4,13 +4,32 @@ import { supabase, assertNoDbError, rowToCamel, rowsToCamel } from '../config/su
 import { sendSuccess } from '../utils/response';
 import { NotFoundError, ForbiddenError } from '../utils/errors';
 import { AuthRequest } from '../types';
-import { Response, NextFunction } from 'express';
+import { Response, NextFunction, Request } from 'express';
+import { ApprovalService } from '../services/approval.service';
 
 const router = Router();
+
+// ─── PUBLIC route — no auth required ─────────────────────────────────────────
+// GET /api/quotations/shared/:token
+// Company B uses this to view the quotation Company A shared with them
+router.get('/shared/:token', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const quotation = await ApprovalService.getSharedQuotation(req.params.token as string);
+    sendSuccess(res, {
+      quotation,
+      sharedView: true,
+      message: 'This quotation was shared with you by the service provider.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── PROTECTED routes ──────────────────────────────────────────────────────────
 router.use(authenticate);
 
 /**
- * Get all enquiry IDs that belong to a user (two-step approach).
+ * Get all enquiry IDs for a user — two-step approach.
  * Supabase JS v2 cross-table .eq('joinedTable.column', value) is unreliable.
  */
 async function getUserEnquiryIds(userId: string): Promise<string[]> {
@@ -26,8 +45,6 @@ async function getUserEnquiryIds(userId: string): Promise<string[]> {
 router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.id;
-
-    // Step 1: get user's enquiry IDs
     const enquiryIds = await getUserEnquiryIds(userId);
 
     if (enquiryIds.length === 0) {
@@ -35,7 +52,6 @@ router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
       return;
     }
 
-    // Step 2: get quotations for those enquiries
     const { data, error } = await supabase
       .from('quotations')
       .select(`
