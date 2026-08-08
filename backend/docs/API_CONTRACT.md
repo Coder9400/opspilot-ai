@@ -1,698 +1,441 @@
-# OPSPILOT AI — API Contract
+# OPSPILOT AI — Backend API Contract
 
-> **For Frontend Developers**  
-> Base URL: `http://localhost:5000`  
-> All authenticated requests require: `Authorization: Bearer <jwt_token>`  
-> All responses follow: `{ success: true, data: {} }` or `{ success: false, error: { code, message } }`
-
----
-
-## Authentication
+> Base URL: `http://localhost:5000` (dev) · `VITE_API_BASE_URL` env var in frontend  
+> All protected routes require: `Authorization: Bearer <supabase_access_token>`  
+> Responses are **flat JSON** — no `{success, data}` wrapper on success.  
+> Errors return `{success:false, message:"...", error:{code, message}}` with appropriate HTTP status.
 
 ---
+
+## AUTH
 
 ### POST /api/auth/register
+**No auth required**
 
-Register a new user account.
-
-**Authentication:** None
-
-**Request Body:**
+Request body:
 ```json
 {
-  "name": "John Doe",
-  "email": "john@example.com",
-  "password": "MyPass@123"
+  "fullName": "Jane Smith",
+  "businessName": "Acme Corp",
+  "email": "jane@acme.com",
+  "password": "Password123!"
 }
 ```
 
-| Field | Type | Required | Validation |
-|-------|------|----------|-----------|
-| name | string | ✅ | min 2, max 100 chars |
-| email | string | ✅ | valid email |
-| password | string | ✅ | min 8, max 128 chars |
-
-**Response 201:**
+Success `201`:
 ```json
 {
-  "success": true,
-  "data": {
-    "user": {
-      "id": "cm...",
-      "name": "John Doe",
-      "email": "john@example.com",
-      "createdAt": "2025-01-01T00:00:00.000Z",
-      "updatedAt": "2025-01-01T00:00:00.000Z"
-    },
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-  }
+  "user": { "id": "uuid", "email": "jane@acme.com", "name": "Jane Smith", "fullName": "Jane Smith", "businessName": "Acme Corp" },
+  "token": "<supabase_access_token>",
+  "requiresEmailConfirmation": false
 }
 ```
 
-**Errors:**
-- `409 CONFLICT` — Email already registered
-- `400 VALIDATION_ERROR` — Invalid input
+If email confirmation is enabled: `token` is `null` and `requiresEmailConfirmation: true`.
+
+Errors: `409 Conflict` (email exists), `400 Validation`, `401 Auth`
 
 ---
 
 ### POST /api/auth/login
+**No auth required**
 
-**Authentication:** None
+Request body:
+```json
+{ "email": "jane@acme.com", "password": "Password123!" }
+```
 
-**Request Body:**
+Success `200`:
 ```json
 {
-  "email": "john@example.com",
-  "password": "MyPass@123"
+  "user": { "id": "uuid", "email": "jane@acme.com", "name": "Jane Smith", "fullName": "Jane Smith", "businessName": "Acme Corp" },
+  "token": "<supabase_access_token>"
 }
 ```
 
-**Response 200:**
-```json
-{
-  "success": true,
-  "data": {
-    "user": { "id": "...", "name": "...", "email": "..." },
-    "token": "eyJ..."
-  }
-}
-```
-
-**Errors:**
-- `401 AUTH_ERROR` — Invalid credentials
+Errors: `401 Auth`
 
 ---
 
 ### GET /api/auth/me
+**Auth required**
 
-Get the currently authenticated user.
-
-**Authentication:** ✅ Required
-
-**Response 200:**
+Success `200`:
 ```json
 {
-  "success": true,
-  "data": {
-    "user": {
-      "id": "cm...",
-      "name": "John Doe",
-      "email": "john@example.com",
-      "createdAt": "...",
-      "updatedAt": "..."
-    }
-  }
+  "user": { "id": "uuid", "email": "jane@acme.com", "name": "Jane Smith", "fullName": "Jane Smith", "businessName": "Acme Corp" }
 }
 ```
 
 ---
 
-## Enquiries
+## ENQUIRIES
+
+### GET /api/enquiries
+**Auth required**
+
+Query params: `?status=NEW&priority=HIGH&page=1&limit=20`
+
+Success `200`:
+```json
+{
+  "enquiries": [
+    {
+      "id": "uuid",
+      "content": "Raw enquiry text...",
+      "customer": "ABC Manufacturing",
+      "sourceType": "TEXT",
+      "status": "NEW",
+      "priority": "MEDIUM",
+      "analysis": null,
+      "generatedResponse": null,
+      "createdAt": "2026-08-08T05:00:00Z",
+      "updatedAt": "2026-08-08T05:00:00Z"
+    }
+  ],
+  "pagination": { "total": 1, "page": 1, "limit": 20, "totalPages": 1 }
+}
+```
 
 ---
 
 ### POST /api/enquiries
+**Auth required**
 
-Create a new enquiry from raw text/email/document content.
-
-**Authentication:** ✅ Required
-
-**Request Body:**
+Request body:
 ```json
 {
   "sourceType": "TEXT",
-  "content": "Hi, I need a website for my restaurant. Budget around 50,000 INR. Contact: john@example.com"
+  "content": "ABC Manufacturing needs 50 laptops...",
+  "customer": "ABC Manufacturing"
 }
 ```
 
-| Field | Type | Required | Options |
-|-------|------|----------|---------|
-| sourceType | string | ❌ | `TEXT` \| `EMAIL` \| `DOCUMENT` (default: `TEXT`) |
-| content | string | ✅ | min 10 chars |
-
-**Response 201:**
+Success `201`:
 ```json
 {
-  "success": true,
-  "data": {
-    "enquiry": {
-      "id": "cm...",
-      "userId": "cm...",
-      "rawContent": "Hi, I need a website...",
-      "sourceType": "TEXT",
-      "customerName": null,
-      "customerEmail": null,
-      "customerPhone": null,
-      "requirements": null,
-      "budget": null,
-      "currency": "INR",
-      "timeline": null,
-      "priority": "MEDIUM",
-      "status": "NEW",
-      "missingQuestions": null,
-      "aiSummary": null,
-      "generatedResponse": null,
-      "createdAt": "...",
-      "updatedAt": "..."
-    }
+  "enquiry": {
+    "id": "uuid",
+    "content": "ABC Manufacturing needs 50 laptops...",
+    "customer": "ABC Manufacturing",
+    "sourceType": "TEXT",
+    "status": "NEW",
+    "priority": "MEDIUM",
+    "analysis": null,
+    "generatedResponse": null,
+    "createdAt": "2026-08-08T05:00:00Z",
+    "updatedAt": "2026-08-08T05:00:00Z"
   }
 }
 ```
 
----
-
-### GET /api/enquiries
-
-List authenticated user's enquiries with optional filters.
-
-**Authentication:** ✅ Required
-
-**Query Parameters:**
-| Param | Type | Options |
-|-------|------|---------|
-| status | string | `NEW` \| `ANALYZING` \| `REVIEW` \| `APPROVED` \| `COMPLETED` |
-| priority | string | `LOW` \| `MEDIUM` \| `HIGH` |
-| page | number | default: 1 |
-| limit | number | default: 10, max: 100 |
-
-**Example:** `GET /api/enquiries?status=REVIEW&priority=HIGH&page=1&limit=10`
-
-**Response 200:**
-```json
-{
-  "success": true,
-  "data": {
-    "enquiries": [
-      {
-        "id": "...",
-        "customerName": "Aditya Kumar",
-        "status": "REVIEW",
-        "priority": "HIGH",
-        "aiSummary": "...",
-        "createdAt": "...",
-        "_count": { "quotations": 1, "followUps": 3, "approvals": 2 }
-      }
-    ],
-    "pagination": {
-      "total": 5,
-      "page": 1,
-      "limit": 10,
-      "totalPages": 1
-    }
-  }
-}
-```
+> **Frontend note**: After create, navigate to `/enquiries/${enquiry.id || enquiry.enquiry?.id}`
 
 ---
 
 ### GET /api/enquiries/:id
+**Auth required** · **Ownership enforced**
 
-Get complete enquiry details including quotations, follow-ups, and approvals.
-
-**Authentication:** ✅ Required
-
-**Response 200:**
+Success `200`:
 ```json
 {
-  "success": true,
-  "data": {
-    "enquiry": {
-      "id": "...",
-      "userId": "...",
-      "rawContent": "URGENT! We need an ERP system...",
-      "sourceType": "TEXT",
-      "customerName": "Aditya Kumar",
-      "customerEmail": "aditya@manufact.in",
-      "customerPhone": "9123456789",
-      "requirements": ["ERP system", "Inventory management"],
-      "budget": 350000,
-      "currency": "INR",
-      "timeline": "As soon as possible",
+  "enquiry": {
+    "id": "uuid",
+    "content": "ABC Manufacturing needs 50 laptops...",
+    "customer": "ABC Manufacturing",
+    "sourceType": "TEXT",
+    "status": "REVIEW",
+    "priority": "HIGH",
+    "analysis": {
+      "requirements": ["50 x Windows 11 laptops", "16GB RAM minimum"],
+      "budget": "INR 500000",
+      "timeline": "15 days",
       "priority": "HIGH",
-      "status": "REVIEW",
-      "missingQuestions": ["How many concurrent users?"],
-      "aiSummary": "CRITICAL: Manufacturing unit facing...",
-      "generatedResponse": "Dear Aditya Kumar...",
-      "createdAt": "...",
-      "updatedAt": "...",
-      "quotations": [ { "id": "...", "title": "...", "total": 413000, "status": "PENDING_APPROVAL" } ],
-      "followUps": [ { "id": "...", "title": "...", "status": "PENDING", "dueDate": "..." } ],
-      "approvals": [ { "id": "...", "actionType": "SEND_QUOTATION", "status": "PENDING" } ]
-    }
+      "missingQuestions": ["What is the preferred brand?", "SSD or HDD?"],
+      "summary": "Bulk laptop procurement for ABC Manufacturing...",
+      "intent": "Procurement",
+      "recommendation": "Source from multiple vendors..."
+    },
+    "generatedResponse": "Dear ABC Manufacturing team, Thank you for your enquiry...",
+    "quotations": [...],
+    "followUps": [...],
+    "approvals": [...],
+    "createdAt": "...", "updatedAt": "..."
   }
 }
 ```
 
-**Errors:**
-- `404 NOT_FOUND` — Enquiry not found
-- `403 FORBIDDEN` — Not your enquiry
+Errors: `404 Not Found`, `403 Forbidden`
 
 ---
 
 ### POST /api/enquiries/:id/analyze
+**Auth required** · **Ownership enforced**
 
-Run AI analysis on the raw enquiry content.
+No body required.
 
-**Authentication:** ✅ Required
-
-**Request Body:** None
-
-**Flow:** `NEW → ANALYZING → REVIEW`
-
-**Response 200:**
+Success `200`:
 ```json
 {
-  "success": true,
-  "data": {
-    "enquiry": { "...updated enquiry fields..." },
-    "analysis": {
-      "customerName": "Aditya Kumar",
-      "customerEmail": "aditya@manufact.in",
-      "customerPhone": "9123456789",
-      "requirements": ["ERP system", "Inventory management"],
-      "budget": 350000,
-      "currency": "INR",
-      "timeline": "As soon as possible",
-      "priority": "HIGH",
-      "missingQuestions": ["How many concurrent users?"],
-      "summary": "CRITICAL: Manufacturing unit..."
-    }
+  "enquiry": { "...full enquiry with status=REVIEW..." },
+  "analysis": {
+    "requirements": ["50 x Windows 11 laptops"],
+    "budget": "INR 500000",
+    "timeline": "15 days",
+    "priority": "HIGH",
+    "missingQuestions": ["Preferred brand?"],
+    "summary": "Bulk laptop procurement..."
   }
 }
 ```
 
-**Errors:**
-- `502 AI_ERROR` — AI provider failed (status restored to NEW)
-- `403 FORBIDDEN` — Not your enquiry
+Errors: `502 AI Provider Error`, `404`, `403`
 
 ---
 
 ### POST /api/enquiries/:id/generate-response
+**Auth required** · **Ownership enforced**
 
-Generate a professional customer response using AI.
+No body required.
 
-**Authentication:** ✅ Required
-
-**Request Body:** None
-
-**Response 200:**
+Success `200`:
 ```json
-{
-  "success": true,
-  "data": {
-    "response": "Dear Aditya Kumar,\n\nThank you for reaching out..."
-  }
-}
+{ "response": "Dear customer, Thank you for your enquiry..." }
 ```
 
-> Also creates a `SEND_RESPONSE` approval record in PENDING status.
+Side effect: Creates a `PENDING` approval record, sets enquiry status to `PENDING_APPROVAL`.
 
 ---
 
 ### POST /api/enquiries/:id/generate-quotation
+**Auth required** · **Ownership enforced**
 
-Generate a draft quotation using AI.
+No body required.
 
-**Authentication:** ✅ Required
-
-**Request Body:** None
-
-**Response 201:**
+Success `201`:
 ```json
 {
-  "success": true,
-  "data": {
-    "quotation": {
-      "id": "...",
-      "enquiryId": "...",
-      "title": "ERP Implementation Proposal — Aditya Kumar",
-      "description": "Complete ERP system...",
-      "items": [
-        { "description": "ERP License", "quantity": 1, "unitPrice": 120000, "total": 120000 }
-      ],
-      "subtotal": 350000,
-      "tax": 63000,
-      "total": 413000,
-      "currency": "INR",
-      "validityDays": 30,
-      "notes": "Payment: 50% advance...",
-      "status": "PENDING_APPROVAL",
-      "createdAt": "...",
-      "updatedAt": "..."
-    }
+  "quotation": {
+    "id": "uuid",
+    "enquiryId": "uuid",
+    "title": "Laptop Procurement Quotation",
+    "description": "50 x Windows 11 laptops...",
+    "items": [
+      { "description": "HP ProBook 450 G10", "quantity": 50, "unitPrice": 9500, "subtotal": 475000 }
+    ],
+    "subtotal": 475000,
+    "tax": 25000,
+    "total": 500000,
+    "currency": "INR",
+    "validityDays": 30,
+    "notes": "Prices valid for 30 days",
+    "status": "PENDING_APPROVAL",
+    "createdAt": "..."
   }
 }
 ```
 
-> ⚠️ Quotation status is always `PENDING_APPROVAL`. It cannot be approved automatically.
+Side effect: Creates a `PENDING` approval record, sets enquiry status to `PENDING_APPROVAL`.
 
 ---
 
 ### POST /api/enquiries/:id/generate-followups
+**Auth required** · **Ownership enforced**
 
-Generate follow-up tasks using AI.
+No body required.
 
-**Authentication:** ✅ Required
-
-**Request Body:** None
-
-**Response 201:**
+Success `201`:
 ```json
 {
-  "success": true,
-  "data": {
-    "followUps": [
-      {
-        "id": "...",
-        "enquiryId": "...",
-        "title": "Call client immediately",
-        "description": "Discuss emergency deployment options",
-        "dueDate": "2025-01-02T00:00:00.000Z",
-        "status": "PENDING"
-      }
-    ]
-  }
+  "followUps": [
+    { "id": "uuid", "enquiryId": "uuid", "title": "Follow up on delivery", "description": "...", "dueDate": "2026-08-23T...", "status": "PENDING" }
+  ]
 }
 ```
 
 ---
 
-## Approval Workflow
-
----
-
 ### GET /api/enquiries/:id/approval
+**Auth required** · **Ownership enforced**
 
-Get approval status for an enquiry.
-
-**Authentication:** ✅ Required
-
-**Response 200:**
+Success `200`:
 ```json
 {
-  "success": true,
-  "data": {
-    "enquiryId": "...",
-    "enquiryStatus": "REVIEW",
-    "approvals": [
-      {
-        "id": "...",
-        "actionType": "SEND_QUOTATION",
-        "status": "PENDING",
-        "comments": null,
-        "approvedBy": null,
-        "createdAt": "..."
-      }
-    ],
-    "latestQuotation": { "id": "...", "total": 413000, "status": "PENDING_APPROVAL" },
-    "pendingApprovals": [ { "...pending approval objects..." } ]
-  }
+  "approval": { "id": "uuid", "enquiryId": "uuid", "actionType": "SEND_QUOTATION", "status": "PENDING", "comments": null },
+  "enquiryId": "uuid",
+  "enquiryStatus": "PENDING_APPROVAL",
+  "approvals": [...],
+  "pendingApprovals": [...],
+  "latestQuotation": { "...quotation object..." }
 }
 ```
 
 ---
 
 ### POST /api/enquiries/:id/approve
+**Auth required** · **Ownership enforced**
 
-Approve an action. This is the mandatory human approval gate.
-
-**Authentication:** ✅ Required
-
-**Request Body:**
+Request body:
 ```json
 {
   "actionType": "SEND_QUOTATION",
-  "comments": "Reviewed and approved after manager sign-off"
+  "comments": "Approved — looks good"
 }
 ```
 
-| Field | Type | Required | Options |
-|-------|------|----------|---------|
-| actionType | string | ✅ | `SEND_RESPONSE` \| `SEND_QUOTATION` \| `COMPLETE_WORKFLOW` |
-| comments | string | ❌ | max 2000 chars |
+`actionType` one of: `SEND_RESPONSE`, `SEND_QUOTATION`, `COMPLETE_WORKFLOW`  
+Default: `SEND_QUOTATION`
 
-**Response 200:**
+Success `200`:
 ```json
 {
-  "success": true,
-  "data": {
-    "approval": {
-      "id": "...",
-      "actionType": "SEND_QUOTATION",
-      "status": "APPROVED",
-      "comments": "Reviewed and approved after manager sign-off",
-      "approvedBy": "cm...",
-      "createdAt": "...",
-      "updatedAt": "..."
-    },
-    "message": "Quotation approved. Ready to send to customer (simulated — no email sent)."
-  }
+  "approval": { "id": "uuid", "status": "APPROVED", "approvedBy": "uuid", "comments": "Approved", "updatedAt": "..." },
+  "message": "Quotation approved. Ready to send to customer (simulated — no email sent)."
 }
 ```
-
-**Side effects by actionType:**
-- `SEND_RESPONSE` → Enquiry status → `APPROVED`
-- `SEND_QUOTATION` → Quotation status → `APPROVED`, Enquiry status → `APPROVED`
-- `COMPLETE_WORKFLOW` → Enquiry status → `COMPLETED`
 
 ---
 
 ### POST /api/enquiries/:id/reject
+**Auth required** · **Ownership enforced**
 
-Reject an action. Returns enquiry to REVIEW status.
+Request body (all optional):
+```json
+{ "comments": "Pricing too high, regenerate" }
+```
 
-**Authentication:** ✅ Required
-
-**Request Body:** Same as approve
-
-**Response 200:**
+Success `200`:
 ```json
 {
-  "success": true,
-  "data": {
-    "approval": { "...approval with status REJECTED..." },
-    "message": "Action rejected. Enquiry returned to REVIEW status for revision."
-  }
+  "approval": { "id": "uuid", "status": "REJECTED", "comments": "Pricing too high", "updatedAt": "..." },
+  "message": "Action rejected. Enquiry returned to REVIEW status for revision."
 }
 ```
 
 ---
 
-## Quotations
-
----
+## QUOTATIONS
 
 ### GET /api/quotations
+**Auth required**
 
-List all quotations for authenticated user.
-
-**Authentication:** ✅ Required
-
-**Response 200:**
+Success `200`:
 ```json
 {
-  "success": true,
-  "data": {
-    "quotations": [
-      {
-        "id": "...",
-        "title": "ERP Proposal",
-        "total": 413000,
-        "currency": "INR",
-        "status": "PENDING_APPROVAL",
-        "enquiry": { "customerName": "Aditya Kumar", "priority": "HIGH" }
-      }
-    ]
-  }
+  "quotations": [
+    { "id": "uuid", "enquiryId": "uuid", "title": "...", "total": 500000, "status": "PENDING_APPROVAL", "createdAt": "..." }
+  ]
 }
 ```
 
 ---
 
 ### GET /api/quotations/:id
+**Auth required** · **Ownership enforced**
 
-**Authentication:** ✅ Required
-
-**Response 200:** Full quotation object including enquiry.
-
----
-
-## Follow-Ups
+Success `200`:
+```json
+{ "quotation": { "...full quotation with enquiries relation..." } }
+```
 
 ---
+
+## FOLLOW-UPS
 
 ### GET /api/followups
+**Auth required**
 
-**Authentication:** ✅ Required
+Query: `?status=PENDING`
 
-**Query Parameters:** `status=PENDING|COMPLETED|CANCELLED`
-
-**Response 200:**
+Success `200`:
 ```json
 {
-  "success": true,
-  "data": {
-    "followUps": [
-      {
-        "id": "...",
-        "title": "Call client",
-        "dueDate": "2025-01-02T00:00:00.000Z",
-        "status": "PENDING",
-        "enquiry": { "customerName": "Aditya Kumar", "priority": "HIGH" }
-      }
-    ]
-  }
+  "followUps": [ { "id": "uuid", "title": "Follow up on delivery", "dueDate": "...", "status": "PENDING" } ],
+  "followups": [ "...same array..." ]
 }
 ```
 
 ---
 
 ### PATCH /api/followups/:id
+**Auth required** · **Ownership enforced**
 
-Update follow-up status.
-
-**Authentication:** ✅ Required
-
-**Request Body:**
+Request body:
 ```json
 { "status": "COMPLETED" }
 ```
 
-**Response 200:** Updated follow-up object.
+Status values: `PENDING`, `COMPLETED`, `CANCELLED`
+
+Success `200`:
+```json
+{ "followUp": { "id": "uuid", "status": "COMPLETED", "updatedAt": "..." } }
+```
 
 ---
 
-## Dashboard
-
----
+## DASHBOARD
 
 ### GET /api/dashboard/summary
+**Auth required**
 
-Get all workflow statistics for the authenticated user.
-
-**Authentication:** ✅ Required
-
-**Response 200:**
+Success `200`:
 ```json
 {
-  "success": true,
-  "data": {
-    "enquiries": {
-      "total": 5,
-      "byStatus": {
-        "new": 1,
-        "analyzing": 0,
-        "review": 3,
-        "approved": 0,
-        "completed": 1
-      },
-      "byPriority": {
-        "high": 1,
-        "medium": 2,
-        "low": 2
-      }
-    },
-    "approvals": {
-      "pending": 2
-    },
-    "quotations": {
-      "total": 3,
-      "approved": 1,
-      "pendingApproval": 2
-    },
-    "followUps": {
-      "pending": 5,
-      "completed": 2,
-      "total": 7
-    },
-    "recentHighPriority": [
-      {
-        "id": "...",
-        "customerName": "Aditya Kumar",
-        "aiSummary": "CRITICAL: Manufacturing unit...",
-        "status": "REVIEW",
-        "priority": "HIGH",
-        "createdAt": "..."
-      }
-    ]
-  }
+  "totalEnquiries": 5,
+  "highPriority": 2,
+  "pendingApprovals": 1,
+  "followupsDue": 3,
+  "enquiries": {
+    "total": 5,
+    "byStatus": { "new": 2, "analyzing": 0, "review": 1, "pendingApproval": 1, "approved": 1, "completed": 0 },
+    "byPriority": { "high": 2, "medium": 2, "low": 1 }
+  },
+  "approvals": { "pending": 1 },
+  "quotations": { "total": 2, "approved": 1, "pendingApproval": 1 },
+  "followUps": { "pending": 3, "completed": 1, "total": 4 },
+  "recentHighPriority": [ { "id": "uuid", "customerName": "ABC Mfg", "status": "REVIEW", "priority": "HIGH", "createdAt": "..." } ]
 }
 ```
 
 ---
 
-## Health Check
+## HEALTH
 
 ### GET /health
+**No auth required**
 
-**Authentication:** None
-
-**Response 200:**
+Success `200`:
 ```json
 {
-  "success": true,
-  "data": {
-    "message": "OPSPILOT backend is running",
-    "version": "1.0.0",
-    "environment": "development",
-    "aiProvider": "mock",
-    "timestamp": "2025-01-01T00:00:00.000Z"
-  }
+  "message": "OPSPILOT backend is running",
+  "version": "1.0.0",
+  "environment": "development",
+  "aiProvider": "mistral",
+  "database": "supabase",
+  "timestamp": "2026-08-08T05:00:00Z"
 }
 ```
 
 ---
 
-## Error Reference
+## ENQUIRY STATUS FLOW
 
-| HTTP Code | Error Code | When it Occurs |
-|-----------|-----------|----------------|
-| 400 | `VALIDATION_ERROR` | Invalid request body or query params |
-| 400 | `BAD_REQUEST` | Malformed request |
-| 401 | `AUTH_ERROR` | Missing, expired, or invalid JWT |
-| 403 | `FORBIDDEN` | Attempting to access another user's data |
-| 404 | `NOT_FOUND` | Resource ID doesn't exist |
-| 409 | `CONFLICT` | Duplicate email on register |
-| 502 | `AI_ERROR` | AI provider unavailable or returned invalid output |
-| 500 | `INTERNAL_ERROR` | Unexpected server error |
-
----
-
-## Demo Quick-Start
-
-```bash
-# 1. Register
-curl -X POST http://localhost:5000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test User","email":"test@test.com","password":"Test@1234"}'
-
-# Save the token from the response
-
-# 2. Create enquiry
-TOKEN="eyJ..."
-curl -X POST http://localhost:5000/api/enquiries \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"sourceType":"TEXT","content":"I need a mobile app for my gym to track member attendance, payments, and class schedules. Budget around 1,50,000 INR within 2 months. Contact: Rahul Verma, rahul@fitpro.in, 9876543210"}'
-
-# Save the enquiry ID
-
-# 3. Analyze
-ID="cm..."
-curl -X POST http://localhost:5000/api/enquiries/$ID/analyze \
-  -H "Authorization: Bearer $TOKEN"
-
-# 4. Generate quotation
-curl -X POST http://localhost:5000/api/enquiries/$ID/generate-quotation \
-  -H "Authorization: Bearer $TOKEN"
-
-# 5. Approve
-curl -X POST http://localhost:5000/api/enquiries/$ID/approve \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"actionType":"SEND_QUOTATION","comments":"Approved by manager"}'
-
-# 6. Dashboard
-curl http://localhost:5000/api/dashboard/summary \
-  -H "Authorization: Bearer $TOKEN"
 ```
+NEW → ANALYZING → REVIEW → PENDING_APPROVAL → APPROVED → COMPLETED
+                    ↑____________(reject)_______________|
+```
+
+## PRIORITY VALUES
+`LOW` | `MEDIUM` | `HIGH`
+
+## ERROR FORMAT
+```json
+{
+  "success": false,
+  "message": "Human-readable error message",
+  "error": { "code": "ERROR_CODE", "message": "Same message" }
+}
+```
+
+HTTP status codes: `400` Validation, `401` Unauthorized, `403` Forbidden, `404` Not Found, `409` Conflict, `502` AI Error, `500` Internal
