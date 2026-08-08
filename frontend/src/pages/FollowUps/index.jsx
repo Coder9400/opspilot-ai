@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Sidebar from '../../components/Sidebar'
+import AppShell from '../../components/AppShell'
 import Button from '../../components/Button'
+import { StatusBadge, PriorityBadge } from '../../components/Badge'
 import Loading from '../../components/Loading'
 import ErrorBanner from '../../components/ErrorBanner'
 import EmptyState from '../../components/EmptyState'
@@ -11,17 +12,8 @@ import { getErrorMessage } from '../../utils/errorHandler'
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
-function statusColor(status) {
-  if (!status) return 'var(--color-text-muted)'
-  const s = status.toUpperCase()
-  if (s === 'COMPLETED') return 'var(--color-success)'
-  if (s === 'CANCELLED') return 'var(--color-danger)'
-  return 'var(--color-warning)'
-}
-
 export default function FollowUps() {
   const navigate = useNavigate()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [followups, setFollowups] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -32,7 +24,7 @@ export default function FollowUps() {
     setLoading(true); setError('')
     try {
       const data = await followupService.list()
-      setFollowups(Array.isArray(data) ? data : data.followups || [])
+      setFollowups(Array.isArray(data) ? data : data.followups || data.followUps || data.data?.followUps || [])
     } catch (err) {
       setError(getErrorMessage(err))
     } finally { setLoading(false) }
@@ -53,123 +45,120 @@ export default function FollowUps() {
   const pending = followups.filter((f) => (f.status || '').toUpperCase() !== 'COMPLETED')
   const completed = followups.filter((f) => (f.status || '').toUpperCase() === 'COMPLETED')
 
+  const initials = (name) => (name || '?').slice(0, 2).toUpperCase()
+
   return (
-    <div className="dashboard-layout">
-      <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} aria-hidden="true" />
-      <div className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
-        <Sidebar onClose={() => setSidebarOpen(false)} />
+    <AppShell>
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-title">Follow-ups</h1>
+          <p className="page-subtitle">Track and complete AI-generated follow-up tasks.</p>
+        </div>
+        <div className="page-header-right">
+          <Button variant="outline" size="sm" onClick={load}>↻ Refresh</Button>
+        </div>
       </div>
-      <main className="dashboard-main">
-        <header className="dashboard-header">
-          <div className="dashboard-header-left">
-            <button className="mobile-menu-btn" aria-label="Open navigation" onClick={() => setSidebarOpen((v) => !v)}>☰</button>
+
+      <div className="dash-grid" style={{ marginBottom: 'var(--sp-6)' }}>
+        <div className="metric-card">
+          <div className="metric-card-label">Pending Tasks</div>
+          <div className="metric-card-value" style={{ color: 'var(--indigo-600)' }}>{pending.length}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-card-label">Completed</div>
+          <div className="metric-card-value">{completed.length}</div>
+        </div>
+      </div>
+
+      {error && <ErrorBanner message={error} onRetry={load} style={{ marginBottom: 16 }} />}
+
+      {loading ? (
+        <Loading text="Loading tasks…" />
+      ) : followups.length === 0 ? (
+        <EmptyState
+          icon="🔔"
+          title="No follow-ups yet"
+          description="Follow-ups are generated from enquiries by AI. Analyze an enquiry and generate follow-up tasks."
+          actionLabel="View Enquiries"
+          onAction={() => navigate('/enquiries')}
+        />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-6)' }}>
+          {/* Pending */}
+          {pending.length > 0 && (
             <div>
-              <div className="dashboard-header-title">Follow-ups</div>
-              <div className="dashboard-header-sub">{pending.length} pending · {completed.length} completed</div>
+              <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--sp-3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>⏳</span> Pending ({pending.length})
+              </div>
+              <div className="followup-list">
+                {pending.map((fu) => (
+                  <div key={fu.id} className="followup-item">
+                    <div className="followup-item-left">
+                      <div className="followup-title">{fu.task || fu.title || fu.description || 'Follow-up task'}</div>
+                      <div className="followup-desc" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-body)' }}>{fu.customer || fu.enquiry?.customerName || fu.enquiry?.customer || 'Customer'}</span>
+                        {fu.enquiryId && (
+                          <span style={{ cursor: 'pointer', color: 'var(--indigo-500)', fontWeight: 600 }} onClick={() => navigate(`/enquiries/${fu.enquiryId}`)}>· View Enquiry</span>
+                        )}
+                      </div>
+                      <div className="followup-meta">
+                        <span className="followup-due">📅 Due: {fmtDate(fu.dueDate)}</span>
+                        <PriorityBadge priority={fu.priority || 'medium'} />
+                        <StatusBadge status="pending" />
+                      </div>
+                    </div>
+                    <button
+                      className="followup-done-btn"
+                      onClick={() => setConfirmId(fu.id)}
+                      disabled={updating === fu.id}
+                    >
+                      {updating === fu.id ? '…' : '✓ Complete'}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="dashboard-header-right">
-            <Button variant="ghost" size="sm" onClick={load}>↻ Refresh</Button>
-          </div>
-        </header>
+          )}
 
-        <div className="dashboard-content">
-          {error && <ErrorBanner message={error} onRetry={load} style={{ marginBottom: 16 }} />}
-
-          {loading ? (
-            <Loading text="Loading follow-ups…" />
-          ) : followups.length === 0 ? (
-            <EmptyState
-              icon="🔔"
-              title="No follow-ups yet"
-              message="Follow-ups are generated from enquiries by AI. Analyze an enquiry and generate follow-up tasks."
-              action={{ label: '+ New Enquiry', onClick: () => navigate('/enquiries/new') }}
-            />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-              {/* Pending */}
-              {pending.length > 0 && (
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span>⏳</span> Pending ({pending.length})
-                  </div>
-                  <div className="followups-list">
-                    {pending.map((fu) => (
-                      <div key={fu.id} className="followup-item">
-                        <div className="followup-left">
-                          <div className="followup-company">{fu.customer || fu.enquiry?.customer || 'Customer'}</div>
-                          <div className="followup-subject">{fu.task || fu.description || 'Follow-up task'}</div>
-                          <div className="followup-due today">
-                            📅 Due: {fmtDate(fu.dueDate)}
-                            <span style={{ marginLeft: 8, color: statusColor(fu.status), fontWeight: 600 }}>
-                              · {fu.status || 'PENDING'}
-                            </span>
-                          </div>
-                          {fu.enquiryId && (
-                            <button
-                              onClick={() => navigate(`/enquiries/${fu.enquiryId}`)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)', padding: '4px 0', marginTop: 4 }}
-                            >
-                              View enquiry →
-                            </button>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginLeft: 8, flexShrink: 0 }}>
-                          <button
-                            className="enq-action-btn"
-                            onClick={() => setConfirmId(fu.id)}
-                            disabled={updating === fu.id}
-                          >
-                            {updating === fu.id ? '…' : '✓ Complete'}
-                          </button>
-                        </div>
+          {/* Completed */}
+          {completed.length > 0 && (
+            <div>
+              <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: 'var(--green-600)', marginBottom: 'var(--sp-3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>✅</span> Completed ({completed.length})
+              </div>
+              <div className="followup-list">
+                {completed.map((fu) => (
+                  <div key={fu.id} className="followup-item done">
+                    <div className="followup-item-left">
+                      <div className="followup-title done">{fu.task || fu.title || fu.description || 'Follow-up task'}</div>
+                      <div className="followup-desc">
+                        {fu.customer || fu.enquiry?.customerName || fu.enquiry?.customer || 'Customer'}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Completed */}
-              {completed.length > 0 && (
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-success)' }}>
-                    <span>✅</span> Completed ({completed.length})
-                  </div>
-                  <div className="followups-list">
-                    {completed.map((fu) => (
-                      <div key={fu.id} className="followup-item" style={{ opacity: 0.65 }}>
-                        <div className="followup-left">
-                          <div className="followup-company">{fu.customer || fu.enquiry?.customer || 'Customer'}</div>
-                          <div className="followup-subject" style={{ textDecoration: 'line-through' }}>
-                            {fu.task || fu.description || 'Follow-up task'}
-                          </div>
-                          <div className="followup-due upcoming">
-                            ✅ Completed · Due was {fmtDate(fu.dueDate)}
-                          </div>
-                        </div>
+                      <div className="followup-meta">
+                        <span className="followup-due">Completed</span>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
             </div>
           )}
         </div>
-      </main>
+      )}
 
-      {/* Mark complete confirmation modal */}
+      {/* Confirmation modal */}
       <Modal
         open={!!confirmId}
         onClose={() => setConfirmId(null)}
-        title="Mark as Complete"
+        title="Mark Task Complete"
         confirmLabel="Mark Complete"
         confirmVariant="primary"
         onConfirm={() => markComplete(confirmId)}
         loading={updating === confirmId}
       >
-        <p>Are you sure you want to mark this follow-up as <strong>completed</strong>?</p>
-        <p style={{ marginTop: 8, color: 'var(--color-text-muted)' }}>This action will update the status in the backend.</p>
+        <p>Are you sure you want to mark this follow-up task as completed?</p>
+        <p style={{ marginTop: 8, fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>This action will update the status in the backend.</p>
       </Modal>
-    </div>
+    </AppShell>
   )
 }

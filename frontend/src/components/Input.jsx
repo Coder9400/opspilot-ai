@@ -1,12 +1,12 @@
 import { useState } from 'react'
 
 /**
- * Input – reusable form input.
+ * Input — premium form input component.
  *
  * Props:
- *  id, label, type, placeholder, value, onChange,
- *  error, hint, required,
- *  showPasswordToggle – show eye icon for password fields
+ *   id, label, type, placeholder, value, onChange, error, hint
+ *   required, disabled, autoComplete, autoFocus
+ *   showPasswordToggle — adds show/hide button for password fields
  */
 export default function Input({
   id,
@@ -18,56 +18,57 @@ export default function Input({
   error,
   hint,
   required = false,
+  disabled = false,
+  autoComplete,
+  autoFocus = false,
   showPasswordToggle = false,
   ...rest
 }) {
-  const [visible, setVisible] = useState(false)
-  const inputType = showPasswordToggle ? (visible ? 'text' : 'password') : type
+  const [showPwd, setShowPwd] = useState(false)
+  const inputType = showPasswordToggle ? (showPwd ? 'text' : 'password') : type
 
   return (
-    <div className="input-group">
+    <div className="form-group">
       {label && (
-        <label htmlFor={id} className="input-label">
+        <label className="form-label" htmlFor={id}>
           {label}
-          {required && <span className="required">*</span>}
+          {required && <span className="required" aria-hidden="true"> *</span>}
         </label>
       )}
-
-      <div className={showPasswordToggle ? 'input-wrapper' : ''}>
+      <div className="form-input-wrap">
         <input
           id={id}
           type={inputType}
-          className={`input-field${error ? ' error' : ''}`}
           placeholder={placeholder}
           value={value}
           onChange={onChange}
-          aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
-          aria-invalid={error ? 'true' : undefined}
+          disabled={disabled}
+          autoComplete={autoComplete}
+          autoFocus={autoFocus}
           required={required}
+          aria-required={required}
+          aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
+          aria-invalid={!!error}
+          className={`form-input${error ? ' error' : ''}${showPasswordToggle ? ' has-icon-right' : ''}`}
           {...rest}
         />
         {showPasswordToggle && (
           <button
             type="button"
-            className="input-icon-right"
-            onClick={() => setVisible((v) => !v)}
-            aria-label={visible ? 'Hide password' : 'Show password'}
-            tabIndex={-1}
+            className="form-input-icon-right"
+            onClick={() => setShowPwd((v) => !v)}
+            aria-label={showPwd ? 'Hide password' : 'Show password'}
+            style={{ background: 'none', border: 'none', fontSize: 14 }}
           >
-            {visible ? '🙈' : '👁'}
+            {showPwd ? '🙈' : '👁'}
           </button>
         )}
       </div>
-
       {error && (
-        <span id={`${id}-error`} className="input-error" role="alert">
-          {error}
-        </span>
+        <p id={`${id}-error`} className="form-error" role="alert">{error}</p>
       )}
-      {!error && hint && (
-        <span id={`${id}-hint`} className="input-hint">
-          {hint}
-        </span>
+      {hint && !error && (
+        <p id={`${id}-hint`} className="form-hint">{hint}</p>
       )}
     </div>
   )

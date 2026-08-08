@@ -34,8 +34,15 @@ async function parseResponse(res) {
     throw err
   }
 
+  // Backend uses sendSuccess(res, payload) which wraps in { success: true, data: payload }
+  // Unwrap the data envelope so service callers receive the payload directly
+  if (body && typeof body === 'object' && 'data' in body) {
+    return body.data
+  }
+
   return body
 }
+
 
 /**
  * Core request function.

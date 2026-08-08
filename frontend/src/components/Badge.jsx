@@ -1,68 +1,71 @@
 /**
- * Badge – status / priority indicator.
- *
- * Props:
- *  variant: 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'neutral'
- *  label: string
+ * StatusBadge — compact status pill for enquiry / quotation / followup status.
+ * PriorityBadge — High / Medium / Low pill.
  */
 
-const PRIORITY_MAP = {
-  high:   'danger',
-  HIGH:   'danger',
-  medium: 'warning',
-  MEDIUM: 'warning',
-  low:    'success',
-  LOW:    'success',
+const STATUS_MAP = {
+  new:              'badge-new',
+  analyzing:        'badge-analyzing',
+  review:           'badge-review',
+  in_progress:      'badge-in_progress',
+  pending_approval: 'badge-pending_approval',
+  pending:          'badge-pending',
+  approved:         'badge-approved',
+  completed:        'badge-completed',
+  rejected:         'badge-rejected',
+  cancelled:        'badge-cancelled',
 }
 
-// Maps backend status values (various casings) to badge variant and label
-const STATUS_CONFIG = {
-  new:              { variant: 'primary',   label: 'New' },
-  NEW:              { variant: 'primary',   label: 'New' },
-  analyzing:        { variant: 'analyzing', label: 'Analyzing' },
-  ANALYZING:        { variant: 'analyzing', label: 'Analyzing' },
-  review:           { variant: 'review',    label: 'Review' },
-  REVIEW:           { variant: 'review',    label: 'Review' },
-  in_progress:      { variant: 'info',      label: 'In Progress' },
-  IN_PROGRESS:      { variant: 'info',      label: 'In Progress' },
-  pending_approval: { variant: 'warning',   label: 'Pending Approval' },
-  PENDING_APPROVAL: { variant: 'warning',   label: 'Pending Approval' },
-  PENDING:          { variant: 'warning',   label: 'Pending' },
-  pending:          { variant: 'warning',   label: 'Pending' },
-  awaiting_info:    { variant: 'warning',   label: 'Awaiting Info' },
-  approved:         { variant: 'success',   label: 'Approved' },
-  APPROVED:         { variant: 'success',   label: 'Approved' },
-  completed:        { variant: 'completed', label: 'Completed' },
-  COMPLETED:        { variant: 'completed', label: 'Completed' },
-  rejected:         { variant: 'danger',    label: 'Rejected' },
-  REJECTED:         { variant: 'danger',    label: 'Rejected' },
-  cancelled:        { variant: 'cancelled', label: 'Cancelled' },
-  CANCELLED:        { variant: 'cancelled', label: 'Cancelled' },
+const STATUS_LABELS = {
+  new:              'New',
+  analyzing:        'Analyzing',
+  review:           'Review',
+  in_progress:      'In Progress',
+  pending_approval: 'Pending Approval',
+  pending:          'Pending',
+  approved:         'Approved',
+  completed:        'Completed',
+  rejected:         'Rejected',
+  cancelled:        'Cancelled',
 }
 
-/** Generic Badge */
-export function Badge({ variant = 'neutral', label, className = '' }) {
+const STATUS_DOTS = {
+  new:              '○',
+  analyzing:        '◌',
+  review:           '◑',
+  in_progress:      '◑',
+  pending_approval: '◐',
+  pending:          '◐',
+  approved:         '●',
+  completed:        '●',
+  rejected:         '✕',
+  cancelled:        '○',
+}
+
+export function StatusBadge({ status, style }) {
+  const key = (status || '').toLowerCase().replace(/ /g, '_')
+  const cls = STATUS_MAP[key] || 'badge-neutral'
   return (
-    <span className={`badge badge-${variant} ${className}`}>
-      {label}
+    <span className={`badge ${cls}`} style={style}>
+      <span aria-hidden="true">{STATUS_DOTS[key] || '○'}</span>
+      {STATUS_LABELS[key] || status || '—'}
     </span>
   )
 }
 
-/** PriorityBadge – maps 'HIGH' | 'MEDIUM' | 'LOW' (or lowercase) */
-export function PriorityBadge({ priority }) {
-  const variant = PRIORITY_MAP[priority] ?? PRIORITY_MAP[(priority || '').toLowerCase()] ?? 'neutral'
-  const label = priority ? priority.charAt(0).toUpperCase() + priority.slice(1).toLowerCase() : '—'
-  return <Badge variant={variant} label={label} />
+const PRIORITY_MAP = {
+  high:   { cls: 'badge-high',   label: 'High',   dot: '▲' },
+  medium: { cls: 'badge-medium', label: 'Medium', dot: '■' },
+  low:    { cls: 'badge-low',    label: 'Low',    dot: '▼' },
 }
 
-/** StatusBadge – maps status string to variant + human-readable label */
-export function StatusBadge({ status }) {
-  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG[(status || '').toLowerCase()] ?? null
-  if (config) return <Badge variant={config.variant} label={config.label} />
-  // Fallback: format unknown status nicely
-  const label = (status || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-  return <Badge variant="neutral" label={label} />
+export function PriorityBadge({ priority, style }) {
+  const key = (priority || 'medium').toLowerCase()
+  const cfg = PRIORITY_MAP[key] || PRIORITY_MAP.medium
+  return (
+    <span className={`badge ${cfg.cls}`} style={style}>
+      <span aria-hidden="true">{cfg.dot}</span>
+      {cfg.label}
+    </span>
+  )
 }
-
-export default Badge

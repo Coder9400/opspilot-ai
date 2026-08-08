@@ -1,36 +1,26 @@
 /**
- * Loading – spinner and skeleton states.
- *
- * Usage:
- *   <Loading />                   – centered full-page spinner
- *   <Loading inline />            – small inline spinner
- *   <Loading text="Analyzing..." /> – spinner with custom message
+ * Loading — premium centered loading state.
  */
-export default function Loading({ inline = false, text = 'Loading…' }) {
+export default function Loading({ text = 'Loading…', size = 'md', inline = false }) {
   if (inline) {
     return (
-      <span
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}
-      >
-        <span className="spinner spinner-dark" />
-        {text}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <span
+          className={`loading-spinner${size === 'sm' ? ' loading-spinner-sm' : ''}`}
+          aria-hidden="true"
+        />
+        {text && <span className="loading-text">{text}</span>}
       </span>
     )
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '60px 20px',
-        gap: 16,
-      }}
-    >
-      <div className="spinner spinner-dark" style={{ width: 36, height: 36, borderWidth: 3 }} />
-      <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>{text}</p>
+    <div className="loading-state" role="status" aria-label={text}>
+      <div
+        className={`loading-spinner${size === 'sm' ? ' loading-spinner-sm' : ''}`}
+        aria-hidden="true"
+      />
+      {text && <p className="loading-text">{text}</p>}
     </div>
   )
 }

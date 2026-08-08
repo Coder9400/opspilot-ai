@@ -1,44 +1,22 @@
+import Button from './Button'
+
 /**
- * EmptyState – friendly empty state with icon, message, and optional CTA.
- *
- * Props:
- *   icon: emoji or element
- *   title: string
- *   message: string
- *   action: { label, onClick }
+ * EmptyState — centered empty state with icon, title, description, and optional action.
  */
-export default function EmptyState({ icon = '📭', title, message, action }) {
+export default function EmptyState({
+  icon = '📭',
+  title = 'Nothing here yet',
+  description = '',
+  actionLabel,
+  onAction,
+}) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '60px 20px',
-        textAlign: 'center',
-        gap: 12,
-      }}
-    >
-      <div style={{ fontSize: '3rem', lineHeight: 1 }}>{icon}</div>
-      {title && (
-        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700, color: 'var(--color-text)' }}>
-          {title}
-        </h3>
-      )}
-      {message && (
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', maxWidth: 380 }}>
-          {message}
-        </p>
-      )}
-      {action && (
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={action.onClick}
-          style={{ marginTop: 8 }}
-        >
-          {action.label}
-        </button>
+    <div className="empty-state">
+      <div className="empty-icon" aria-hidden="true">{icon}</div>
+      <h3 className="empty-title">{title}</h3>
+      {description && <p className="empty-desc">{description}</p>}
+      {actionLabel && onAction && (
+        <Button variant="primary" onClick={onAction}>{actionLabel}</Button>
       )}
     </div>
   )

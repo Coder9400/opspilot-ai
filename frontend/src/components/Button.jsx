@@ -1,38 +1,45 @@
 /**
- * Button – reusable button component.
+ * Button — premium pill-shaped button component.
  *
  * Props:
- *  variant: 'primary' | 'outline' | 'ghost' | 'danger'  (default: 'primary')
- *  size: 'sm' | 'md' | 'lg'  (default: 'md')
- *  loading: bool
- *  disabled: bool
- *  fullWidth: bool
- *  onClick, type, className, children, ...rest
+ *   variant: 'primary' | 'outline' | 'ghost' | 'danger' | 'dark' (default: 'primary')
+ *   size: 'sm' | 'md' | 'lg' | 'xl' (default: 'md')
+ *   fullWidth: boolean
+ *   loading: boolean — shows spinner
+ *   disabled: boolean
+ *   children, type, onClick, style, className, ...rest
  */
 export default function Button({
   variant = 'primary',
   size = 'md',
+  fullWidth = false,
   loading = false,
   disabled = false,
-  fullWidth = false,
-  className = '',
   children,
+  type = 'button',
+  onClick,
+  style,
+  className = '',
   ...rest
 }) {
-  const sizeClass = size === 'sm' ? 'btn-sm' : size === 'lg' ? 'btn-lg' : ''
   const cls = [
     'btn',
     `btn-${variant}`,
-    sizeClass,
-    fullWidth ? 'w-full' : '',
+    size !== 'md' ? `btn-${size}` : '',
+    fullWidth ? 'btn-full' : '',
     className,
-  ]
-    .filter(Boolean)
-    .join(' ')
+  ].filter(Boolean).join(' ')
 
   return (
-    <button className={cls} disabled={disabled || loading} {...rest}>
-      {loading && <span className="spinner" />}
+    <button
+      type={type}
+      className={cls}
+      disabled={disabled || loading}
+      onClick={onClick}
+      style={style}
+      {...rest}
+    >
+      {loading && <span className="btn-spinner" aria-hidden="true" />}
       {children}
     </button>
   )

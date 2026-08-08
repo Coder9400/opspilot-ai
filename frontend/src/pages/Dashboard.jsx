@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Sidebar from '../components/Sidebar'
-import DashboardCard from '../components/DashboardCard'
-import { PriorityBadge, StatusBadge } from '../components/Badge'
+import AppShell from '../components/AppShell'
+import { StatusBadge, PriorityBadge } from '../components/Badge'
 import Button from '../components/Button'
 import Loading from '../components/Loading'
 import ErrorBanner from '../components/ErrorBanner'
@@ -10,283 +9,428 @@ import EmptyState from '../components/EmptyState'
 import { useAuth } from '../hooks/useAuth'
 import { dashboardService } from '../services/dashboard.service'
 import { enquiryService } from '../services/enquiry.service'
-import { followupService } from '../services/followup.service'
 import { getErrorMessage } from '../utils/errorHandler'
-
-const KPI_CONFIG = [
-  { label: 'Total Enquiries',  key: 'totalEnquiries',  icon: '📋', iconBg: '#e0e7ff', iconColor: '#4f46e5' },
-  { label: 'High Priority',    key: 'highPriority',    icon: '🚨', iconBg: '#fee2e2', iconColor: '#dc2626' },
-  { label: 'Pending Approval', key: 'pendingApprovals',icon: '⏳', iconBg: '#fef3c7', iconColor: '#d97706' },
-  { label: 'Follow-ups Due',   key: 'followupsDue',    icon: '🔔', iconBg: '#dcfce7', iconColor: '#16a34a' },
-]
 
 const fmtDate = (d) => {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function getTimeOfDay() {
-  const h = new Date().getHours()
-  if (h < 12) return 'morning'
-  if (h < 17) return 'afternoon'
-  return 'evening'
+const fmtCurrency = (v, cur = 'USD') => {
+  if (v == null) return '—'
+  try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(v) } catch { return `${cur} ${v}` }
 }
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const [stats, setStats] = useState(null)
   const [statsLoading, setStatsLoading] = useState(true)
   const [statsError, setStatsError] = useState('')
 
   const [enquiries, setEnquiries] = useState([])
+  const [filteredEnquiries, setFilteredEnquiries] = useState([])
+  const [selectedEnquiry, setSelectedEnquiry] = useState(null)
   const [enqLoading, setEnqLoading] = useState(true)
-  const [enqError, setEnqError] = useState('')
-  const [search, setSearch] = useState('')
 
-  const [followups, setFollowups] = useState([])
-  const [fuLoading, setFuLoading] = useState(true)
+  // Filters State
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [priorityFilter, setPriorityFilter] = useState('')
+  const [customerFilter, setCustomerFilter] = useState('')
+  const [timeRange, setTimeRange] = useState('This Month')
 
-  const loadStats = useCallback(async () => {
-    setStatsLoading(true); setStatsError('')
+  const load = useCallback(async () => {
+    setStatsLoading(true)
+    setStatsError('')
     try {
-      const data = await dashboardService.getSummary()
-      setStats(data)
-    } catch (err) {
-      setStatsError(getErrorMessage(err))
-    } finally { setStatsLoading(false) }
+      const s = await dashboardService.getSummary()
+      setStats(s?.summary || s)
+    } catch (err) { 
+      setStatsError(getErrorMessage(err)) 
+    } finally { 
+      setStatsLoading(false) 
+    }
+
+    setEnqLoading(true)
+    try {
+      const e = await enquiryService.list()
+      const list = e?.enquiries || e?.data?.enquiries || []
+      setEnquiries(list)
+      setFilteredEnquiries(list)
+      if (list.length > 0) {
+        setSelectedEnquiry(list[0])
+      }
+    } catch { 
+      setEnquiries([]) 
+      setFilteredEnquiries([])
+    } finally { 
+      setEnqLoading(false) 
+    }
   }, [])
 
-  const loadEnquiries = useCallback(async () => {
-    setEnqLoading(true); setEnqError('')
-    try {
-      const data = await enquiryService.list()
-      setEnquiries(Array.isArray(data) ? data : data.enquiries || [])
-    } catch (err) {
-      setEnqError(getErrorMessage(err))
-    } finally { setEnqLoading(false) }
-  }, [])
+  useEffect(() => { load() }, [load])
 
-  const loadFollowups = useCallback(async () => {
-    setFuLoading(true)
-    try {
-      const data = await followupService.list()
-      setFollowups(Array.isArray(data) ? data : data.followups || [])
-    } catch { /* non-critical */ } finally { setFuLoading(false) }
-  }, [])
-
+  // Apply filters
   useEffect(() => {
-    loadStats(); loadEnquiries(); loadFollowups()
-  }, [loadStats, loadEnquiries, loadFollowups])
+    let result = enquiries
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase()
+      result = result.filter(e => 
+        (e.customerName || '').toLowerCase().includes(q) ||
+        (e.customerEmail || '').toLowerCase().includes(q) ||
+        (e.aiSummary || '').toLowerCase().includes(q)
+      )
+    }
+    if (statusFilter) {
+      result = result.filter(e => e.status === statusFilter)
+    }
+    if (priorityFilter) {
+      result = result.filter(e => (e.priority || '').toUpperCase() === priorityFilter.toUpperCase())
+    }
+    if (customerFilter) {
+      result = result.filter(e => (e.customerName || '').toLowerCase().includes(customerFilter.toLowerCase()))
+    }
+    setFilteredEnquiries(result)
+    // Auto select first of filtered list if current selection is not in result
+    if (result.length > 0 && (!selectedEnquiry || !result.find(e => e.id === selectedEnquiry.id))) {
+      setSelectedEnquiry(result[0])
+    } else if (result.length === 0) {
+      setSelectedEnquiry(null)
+    }
+  }, [searchTerm, statusFilter, priorityFilter, customerFilter, enquiries])
 
-  const firstName = (user?.fullName || user?.name || 'there').split(' ')[0]
-  const company = user?.businessName || user?.company || ''
+  // Derived KPI Stats
+  const totalEnq = enquiries.length
+  const pendingApproval = enquiries.filter(e => e.status === 'PENDING_APPROVAL').length
+  const avgResponse = '1.4 hrs'
+  const estValue = enquiries.reduce((sum, e) => sum + (e.budget || 0), 0)
 
-  const filteredEnquiries = enquiries.filter((e) =>
-    !search ||
-    (e.customer || '').toLowerCase().includes(search.toLowerCase()) ||
-    (e.content || '').toLowerCase().includes(search.toLowerCase()) ||
-    (e.status || '').toLowerCase().includes(search.toLowerCase())
-  )
-
-  // Enquiries pending approval
-  const pendingApprovals = enquiries.filter((e) =>
-    (e.status || '').toLowerCase() === 'pending_approval' ||
-    (e.approvalStatus || '').toLowerCase() === 'pending'
-  )
+  // Unique list of customers for filtering
+  const uniqueCustomers = Array.from(new Set(enquiries.map(e => e.customerName).filter(Boolean)))
 
   return (
-    <div className="dashboard-layout">
-      <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} aria-hidden="true" />
-      <div className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
-        <Sidebar onClose={() => setSidebarOpen(false)} />
+    <AppShell>
+      {/* ── Main Dashboard Header ── */}
+      <div className="db-page-header">
+        <div>
+          <h1 className="db-page-title">Dashboard</h1>
+          <p className="db-page-subtitle">Track and manage your business workflow.</p>
+        </div>
+        <Button variant="primary" onClick={() => navigate('/enquiries/new')}>
+          + New Enquiry
+        </Button>
       </div>
 
-      <main className="dashboard-main">
-        {/* Header */}
-        <header className="dashboard-header">
-          <div className="dashboard-header-left">
-            <button className="mobile-menu-btn" aria-label="Open navigation" onClick={() => setSidebarOpen((v) => !v)}>☰</button>
-            <div>
-              <div className="dashboard-header-title">Dashboard</div>
-              <div className="dashboard-header-sub">
-                {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-              </div>
+      {statsError && <ErrorBanner message={statsError} onRetry={load} style={{ marginBottom: 24 }} />}
+
+      {/* ── KPI Cards ── */}
+      <div className="db-kpi-grid">
+        <div className="db-kpi-card">
+          <div className="kpi-header">
+            <span className="kpi-label">Total Enquiries</span>
+            <span className="kpi-icon-wrap bg-purple-light">📋</span>
+          </div>
+          <div className="kpi-value">{statsLoading ? '...' : totalEnq}</div>
+          <div className="kpi-footer">
+            <span className="trend positive">↑ 12.5%</span>
+            <span className="kpi-sub">vs last month</span>
+          </div>
+        </div>
+
+        <div className="db-kpi-card">
+          <div className="kpi-header">
+            <span className="kpi-label">Pending Approval</span>
+            <span className="kpi-icon-wrap bg-amber-light">⏳</span>
+          </div>
+          <div className="kpi-value text-warning">{statsLoading ? '...' : pendingApproval}</div>
+          <div className="kpi-footer">
+            <span className="kpi-sub">Requires human review</span>
+          </div>
+        </div>
+
+        <div className="db-kpi-card">
+          <div className="kpi-header">
+            <span className="kpi-label">Avg. Response Time</span>
+            <span className="kpi-icon-wrap bg-indigo-light">⏱️</span>
+          </div>
+          <div className="kpi-value">{avgResponse}</div>
+          <div className="kpi-footer">
+            <span className="trend positive">↓ 18% improvement</span>
+          </div>
+        </div>
+
+        <div className="db-kpi-card">
+          <div className="kpi-header">
+            <span className="kpi-label">Estimated Value</span>
+            <span className="kpi-icon-wrap bg-green-light">💰</span>
+          </div>
+          <div className="kpi-value">{fmtCurrency(estValue)}</div>
+          <div className="kpi-footer">
+            <span className="trend positive">↑ 8.4% increase</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Analytics Section ── */}
+      <div className="db-analytics-grid">
+        {/* Card 1: Enquiries Overview */}
+        <div className="db-chart-card">
+          <div className="chart-header">
+            <h3>Enquiries Overview</h3>
+            <select value={timeRange} onChange={(e) => setTimeRange(e.target.value)} className="chart-select">
+              <option>This Week</option>
+              <option>This Month</option>
+              <option>Last 30 Days</option>
+            </select>
+          </div>
+          <div className="bar-chart-visual">
+            {/* Visual representation of a bar chart using CSS grids */}
+            <div className="bar-group">
+              <div className="bar" style={{ height: '40%' }}><span className="tooltip">8 Enquiries</span></div>
+              <span className="bar-label">Mon</span>
+            </div>
+            <div className="bar-group">
+              <div className="bar" style={{ height: '65%' }}><span className="tooltip">12 Enquiries</span></div>
+              <span className="bar-label">Tue</span>
+            </div>
+            <div className="bar-group">
+              <div className="bar active" style={{ height: '85%' }}><span className="tooltip">18 Enquiries (Peak)</span></div>
+              <span className="bar-label">Wed</span>
+            </div>
+            <div className="bar-group">
+              <div className="bar" style={{ height: '50%' }}><span className="tooltip">10 Enquiries</span></div>
+              <span className="bar-label">Thu</span>
+            </div>
+            <div className="bar-group">
+              <div className="bar" style={{ height: '70%' }}><span className="tooltip">14 Enquiries</span></div>
+              <span className="bar-label">Fri</span>
             </div>
           </div>
-          <div className="dashboard-header-right">
-            <Button variant="primary" size="sm" onClick={() => navigate('/enquiries/new')} id="btn-new-enquiry">
-              + New Enquiry
-            </Button>
-            <div className="header-avatar" title={user?.fullName || 'User'} aria-label="User profile">
-              {(user?.fullName || 'U').split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2)}
-            </div>
-          </div>
-        </header>
+        </div>
 
-        <div className="dashboard-content">
-          {/* Welcome */}
-          <div className="dashboard-welcome">
-            <h1>Good {getTimeOfDay()}, {firstName} 👋</h1>
-            <p>Here's what needs your attention today{company ? ` at ${company}` : ''}.</p>
+        {/* Card 2: Priority breakdown */}
+        <div className="db-chart-card">
+          <div className="chart-header">
+            <h3>Enquiries by Priority</h3>
           </div>
-
-          {/* KPI Cards */}
-          {statsError && <ErrorBanner message={statsError} onRetry={loadStats} />}
-          <div className="kpi-grid">
-            {KPI_CONFIG.map((kpi) => (
-              <DashboardCard
-                key={kpi.label}
-                label={kpi.label}
-                value={statsLoading ? '…' : (stats?.[kpi.key] ?? '—')}
-                icon={kpi.icon}
-                iconBg={kpi.iconBg}
-                iconColor={kpi.iconColor}
-              />
-            ))}
-          </div>
-
-          <div className="dashboard-grid">
-            {/* Recent Enquiries */}
-            <div>
-              <div className="section-header">
-                <h2>Recent Enquiries</h2>
-                <button onClick={() => navigate('/enquiries')}>View all →</button>
-              </div>
-              <div className="enquiries-table-wrapper">
-                <div className="table-toolbar">
-                  <div className="table-search">
-                    <span>🔍</span>
-                    <input
-                      type="search"
-                      placeholder="Search enquiries…"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      aria-label="Search enquiries"
-                      id="enquiry-search"
-                    />
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => navigate('/enquiries/new')}>+ New</Button>
-                </div>
-                {enqLoading ? (
-                  <Loading text="Loading enquiries…" />
-                ) : enqError ? (
-                  <ErrorBanner message={enqError} onRetry={loadEnquiries} />
-                ) : filteredEnquiries.length === 0 ? (
-                  <EmptyState
-                    icon="📋"
-                    title="No enquiries yet"
-                    message="Create your first enquiry to get started."
-                    action={{ label: '+ New Enquiry', onClick: () => navigate('/enquiries/new') }}
-                  />
-                ) : (
-                  <table className="enq-table" aria-label="Recent enquiries">
-                    <thead>
-                      <tr>
-                        <th>Customer / Content</th>
-                        <th>Priority</th>
-                        <th>Status</th>
-                        <th>Created</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredEnquiries.slice(0, 8).map((enq) => (
-                        <tr key={enq.id}>
-                          <td>
-                            <div className="enq-company">{enq.customer || 'Customer'}</div>
-                            <div className="enq-subject">{(enq.content || '').slice(0, 60)}{(enq.content || '').length > 60 ? '…' : ''}</div>
-                          </td>
-                          <td><PriorityBadge priority={(enq.priority || 'MEDIUM').toLowerCase()} /></td>
-                          <td><StatusBadge status={(enq.status || 'new').toLowerCase().replace(/ /g, '_')} /></td>
-                          <td>{fmtDate(enq.createdAt)}</td>
-                          <td>
-                            <button className="enq-action-btn" onClick={() => navigate(`/enquiries/${enq.id}`)}>
-                              Review →
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+          <div className="priority-donut-section">
+            <div className="donut-graphic">
+              {/* Circular progress representations */}
+              <svg viewBox="0 0 36 36" className="circular-chart">
+                <path className="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path className="circle high" strokeDasharray="30, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path className="circle medium" strokeDasharray="50, 100" strokeDashoffset="-30" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path className="circle low" strokeDasharray="20, 100" strokeDashoffset="-80" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              </svg>
+              <div className="donut-center-label">
+                <strong>{totalEnq}</strong>
+                <span>Total</span>
               </div>
             </div>
+            <div className="donut-legend">
+              <div className="legend-item"><span className="dot dot-high" /> High ({enquiries.filter(e=>e.priority?.toLowerCase()==='high').length})</div>
+              <div className="legend-item"><span className="dot dot-medium" /> Medium ({enquiries.filter(e=>e.priority?.toLowerCase()==='medium').length})</div>
+              <div className="legend-item"><span className="dot dot-low" /> Low ({enquiries.filter(e=>e.priority?.toLowerCase()==='low').length})</div>
+            </div>
+          </div>
+        </div>
 
-            {/* Right column */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-              {/* Pending Approvals */}
-              <div>
-                <div className="section-header">
-                  <h2>Pending Approvals</h2>
-                  {pendingApprovals.length > 0 && (
-                    <span className="badge badge-warning" style={{ fontWeight: 700 }}>
-                      {pendingApprovals.length}
-                    </span>
-                  )}
-                </div>
-                {enqLoading ? <Loading text="Loading…" /> : pendingApprovals.length === 0 ? (
-                  <EmptyState icon="✅" title="No pending approvals" message="All caught up!" />
-                ) : (
-                  <div className="approvals-list">
-                    {pendingApprovals.slice(0, 3).map((enq) => (
-                      <div key={enq.id} className="approval-item">
-                        <div className="approval-item-header">
-                          <div>
-                            <div className="approval-company">{enq.customer || 'Customer'}</div>
-                            <div className="approval-type">Enquiry · {(enq.status || '').replace(/_/g, ' ')}</div>
-                          </div>
-                          <PriorityBadge priority={(enq.priority || 'MEDIUM').toLowerCase()} />
-                        </div>
-                        <p className="approval-desc">{(enq.content || '').slice(0, 100)}{(enq.content || '').length > 100 ? '…' : ''}</p>
-                        <div className="approval-actions">
-                          <Button variant="primary" size="sm" onClick={() => navigate(`/enquiries/${enq.id}`)}>
-                            Review →
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+        {/* Card 3: Top Revenue Sources */}
+        <div className="db-chart-card">
+          <div className="chart-header">
+            <h3>Top Revenue Sources</h3>
+          </div>
+          <div className="revenue-sources-list">
+            <div className="rev-source">
+              <div className="rev-info">
+                <span>Acme Corp</span>
+                <strong>{fmtCurrency(15000)}</strong>
               </div>
-
-              {/* Upcoming Follow-ups */}
-              <div>
-                <div className="section-header">
-                  <h2>Upcoming Follow-ups</h2>
-                  <button onClick={() => navigate('/followups')}>View all →</button>
-                </div>
-                {fuLoading ? <Loading text="Loading…" /> : followups.length === 0 ? (
-                  <EmptyState icon="🔔" title="No follow-ups" message="No upcoming follow-ups." />
-                ) : (
-                  <div className="followups-list">
-                    {followups.slice(0, 4).map((fu) => (
-                      <div key={fu.id} className="followup-item">
-                        <div className="followup-left">
-                          <div className="followup-company">{fu.customer || fu.enquiry?.customer || 'Customer'}</div>
-                          <div className="followup-subject">{fu.task || fu.description || ''}</div>
-                          <div className={`followup-due ${fu.status === 'COMPLETED' ? 'upcoming' : 'today'}`}>
-                            📅 {fmtDate(fu.dueDate)} · <span style={{ textTransform: 'capitalize' }}>{(fu.status || '').toLowerCase()}</span>
-                          </div>
-                        </div>
-                        <button
-                          className="enq-action-btn"
-                          style={{ marginLeft: 8, flexShrink: 0 }}
-                          onClick={() => navigate('/followups')}
-                        >
-                          View
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="progress-bar-container">
+                <div className="progress-bar" style={{ width: '80%', background: 'var(--indigo-500)' }} />
+              </div>
+            </div>
+            <div className="rev-source">
+              <div className="rev-info">
+                <span>Stark Industries</span>
+                <strong>{fmtCurrency(12000)}</strong>
+              </div>
+              <div className="progress-bar-container">
+                <div className="progress-bar" style={{ width: '65%', background: 'var(--violet-500)' }} />
+              </div>
+            </div>
+            <div className="rev-source">
+              <div className="rev-info">
+                <span>Wayne Enterprises</span>
+                <strong>{fmtCurrency(8500)}</strong>
+              </div>
+              <div className="progress-bar-container">
+                <div className="progress-bar" style={{ width: '45%', background: 'var(--indigo-400)' }} />
               </div>
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+
+      {/* ── Filter / Search Bar ── */}
+      <div className="db-filter-bar">
+        <div className="filter-search-wrap">
+          <span className="search-icon">🔍</span>
+          <input 
+            type="text" 
+            placeholder="Search enquiries..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
+          />
+        </div>
+
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="filter-select">
+          <option value="">All Statuses</option>
+          <option value="NEW">New</option>
+          <option value="ANALYZING">Analyzing</option>
+          <option value="REVIEW">Review</option>
+          <option value="PENDING_APPROVAL">Pending Approval</option>
+          <option value="COMPLETED">Completed</option>
+        </select>
+
+        <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="filter-select">
+          <option value="">All Priorities</option>
+          <option value="HIGH">High</option>
+          <option value="MEDIUM">Medium</option>
+          <option value="LOW">Low</option>
+        </select>
+
+        <select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} className="filter-select">
+          <option value="">All Customers</option>
+          {uniqueCustomers.map(cust => (
+            <option key={cust} value={cust}>{cust}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* ── Recent Enquiries Split Layout ── */}
+      <div className="db-workspace-split">
+        {/* Left Side: Recent Enquiries */}
+        <div className="db-list-panel">
+          <div className="list-panel-header">
+            <h3>Recent Enquiries</h3>
+            <button className="text-btn" onClick={() => navigate('/enquiries')}>View all enquiries →</button>
+          </div>
+
+          <div className="data-table-wrap">
+            {enqLoading ? (
+              <Loading text="Loading enquiries..." />
+            ) : filteredEnquiries.length === 0 ? (
+              <EmptyState 
+                icon="📋" 
+                title="No matching enquiries" 
+                description="Try modifying your search or filter options." 
+              />
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Budget</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEnquiries.map((enq) => {
+                    const isSelected = selectedEnquiry?.id === enq.id
+                    return (
+                      <tr 
+                        key={enq.id} 
+                        onClick={() => setSelectedEnquiry(enq)} 
+                        className={isSelected ? 'selected-row' : ''}
+                      >
+                        <td>
+                          <div className="customer-cell">
+                            <div className="customer-avatar" aria-hidden="true">
+                              {(enq.customerName || '?').slice(0,2).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="customer-name">{enq.customerName || 'Unknown'}</div>
+                              <div className="customer-email">{enq.customerEmail || ''}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td><PriorityBadge priority={(enq.priority || 'medium').toLowerCase()} /></td>
+                        <td><StatusBadge status={(enq.status || 'new').toLowerCase().replace(/ /g, '_')} /></td>
+                        <td><strong>{fmtCurrency(enq.budget)}</strong></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Right Side: Selected Enquiry Detail Panel */}
+        <div className="db-detail-panel">
+          {selectedEnquiry ? (
+            <div className="db-detail-card">
+              <div className="detail-card-header">
+                <div>
+                  <span className="detail-id">Enquiry #{selectedEnquiry.id.slice(0, 8)}</span>
+                  <h4>{selectedEnquiry.customerName || 'Unknown'}</h4>
+                </div>
+                <StatusBadge status={(selectedEnquiry.status || 'new').toLowerCase().replace(/ /g, '_')} />
+              </div>
+
+              <div className="detail-meta-list">
+                <div className="detail-meta-row">
+                  <span>Priority:</span>
+                  <PriorityBadge priority={(selectedEnquiry.priority || 'medium').toLowerCase()} />
+                </div>
+                <div className="detail-meta-row">
+                  <span>Assigned User:</span>
+                  <strong>{user?.fullName || 'Unassigned'}</strong>
+                </div>
+                <div className="detail-meta-row">
+                  <span>Estimated Value:</span>
+                  <strong>{fmtCurrency(selectedEnquiry.budget)}</strong>
+                </div>
+                <div className="detail-meta-row">
+                  <span>Received Date:</span>
+                  <span>{fmtDate(selectedEnquiry.createdAt)}</span>
+                </div>
+              </div>
+
+              {selectedEnquiry.status === 'PENDING_APPROVAL' && (
+                <div className="detail-approval-notice">
+                  <span className="notice-icon">⚠️</span>
+                  <div>
+                    <h5>Human Approval Required</h5>
+                    <p>Suggested quotation/proposal requires manual approval before sending.</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="detail-summary-section">
+                <h5>AI Summary / Extract</h5>
+                <p>{selectedEnquiry.aiSummary || selectedEnquiry.rawContent || 'No summary available.'}</p>
+              </div>
+
+              <button 
+                className="btn btn-primary btn-full"
+                onClick={() => navigate(`/enquiries/${selectedEnquiry.id}`)}
+              >
+                View Full Workspace Details →
+              </button>
+            </div>
+          ) : (
+            <div className="db-detail-empty">
+              <span>📋</span>
+              <p>Select an enquiry from the list to view quick workspace details.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </AppShell>
   )
 }

@@ -1,34 +1,36 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import Input from '../components/Input'
 import Button from '../components/Button'
-import { authService } from '../services/auth.service'
+import { useAuth } from '../hooks/useAuth'
 import { getErrorMessage } from '../utils/errorHandler'
-
-const AUTH_FEATURES = [
-  { icon: '🚀', text: 'Set up in under 5 minutes' },
-  { icon: '🔒', text: 'Your data is encrypted and private' },
-  { icon: '🤝', text: 'No credit card required to start' },
-  { icon: '✅', text: 'Human approval on every AI action' },
-]
+import AuthLayout from '../components/AuthLayout'
+import AuthSocialButtons from '../components/AuthSocialButtons'
 
 function validate(fields) {
   const errs = {}
-  if (!fields.fullName.trim()) errs.fullName = 'Full name is required.'
-  else if (fields.fullName.trim().length < 2) errs.fullName = 'Name must be at least 2 characters.'
-  if (!fields.businessName.trim()) errs.businessName = 'Business name is required.'
-  if (!fields.email.trim()) errs.email = 'Email address is required.'
-  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) errs.email = 'Please enter a valid email address.'
-  if (!fields.password) errs.password = 'Password is required.'
-  else if (fields.password.length < 8) errs.password = 'Password must be at least 8 characters.'
-  if (!fields.confirmPassword) errs.confirmPassword = 'Please confirm your password.'
-  else if (fields.password !== fields.confirmPassword) errs.confirmPassword = 'Passwords do not match.'
+  if (!fields.name.trim()) errs.name = 'Full name is required.'
+  if (!fields.email.trim()) {
+    errs.email = 'Email address is required.'
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) {
+    errs.email = 'Please enter a valid email address.'
+  }
+  if (!fields.password) {
+    errs.password = 'Password is required.'
+  } else if (fields.password.length < 6) {
+    errs.password = 'Password must be at least 6 characters.'
+  }
+  if (fields.password !== fields.confirmPassword) {
+    errs.confirmPassword = 'Passwords do not match.'
+  }
   return errs
 }
 
 export default function Register() {
   const navigate = useNavigate()
-  const [fields, setFields] = useState({ fullName: '', businessName: '', email: '', password: '', confirmPassword: '' })
+  const { register } = useAuth()
+
+  const [fields, setFields] = useState({ name: '', email: '', password: '', confirmPassword: '' })
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState('')
@@ -43,18 +45,11 @@ export default function Register() {
     e.preventDefault()
     const errs = validate(fields)
     if (Object.keys(errs).length) { setErrors(errs); return }
-
-    setLoading(true)
-    setFormError('')
-
+    
+    setLoading(true); setFormError('')
     try {
-      await authService.register({
-        fullName: fields.fullName,
-        businessName: fields.businessName,
-        email: fields.email,
-        password: fields.password,
-      })
-      navigate('/login', { state: { registered: true } })
+      await register({ name: fields.name, email: fields.email, password: fields.password })
+      navigate('/dashboard', { replace: true })
     } catch (err) {
       setFormError(getErrorMessage(err))
     } finally {
@@ -63,74 +58,70 @@ export default function Register() {
   }
 
   return (
-    <div className="auth-page">
-      {/* Left panel */}
-      <div className="auth-left">
-        <div className="auth-left-content">
-          <div className="auth-left-logo">
-            <div className="logo-icon">O</div>
-            <div className="logo-text">OPSPILOT AI</div>
-          </div>
-          <h2 className="auth-left-heading">Start automating your workflow today</h2>
-          <p className="auth-left-sub">
-            Join small businesses processing enquiries faster and closing more deals with OPSPILOT AI.
-          </p>
-          <div className="auth-feature-list">
-            {AUTH_FEATURES.map((f) => (
-              <div key={f.text} className="auth-feature-item">
-                <div className="auth-feature-icon">{f.icon}</div>
-                <span>{f.text}</span>
-              </div>
-            ))}
-          </div>
+    <AuthLayout 
+      title="Create your account" 
+      subtitle="Start managing your customer workflows with OPSPILOT AI."
+      footerText="Already have an account?"
+      footerLinkText="Sign in"
+      footerLinkTo="/login"
+    >
+      {formError && (
+        <div className="form-error-banner" role="alert" style={{ marginBottom: 20 }}>
+          ⚠️ {formError}
         </div>
-      </div>
+      )}
 
-      {/* Right panel */}
-      <div className="auth-right">
-        <div className="auth-form-box">
-          <h1 className="auth-form-heading">Create your account</h1>
-          <p className="auth-form-sub">Get started with OPSPILOT AI — free, no credit card required.</p>
+      <form className="auth-form" onSubmit={handleSubmit} noValidate>
+        <Input
+          id="reg-name"
+          label="Full Name"
+          placeholder="Enter your full name"
+          value={fields.name}
+          onChange={set('name')}
+          error={errors.name}
+          required
+          autoComplete="name"
+        />
+        <Input
+          id="reg-email"
+          label="Email address"
+          type="email"
+          placeholder="Enter your email"
+          value={fields.email}
+          onChange={set('email')}
+          error={errors.email}
+          required
+          autoComplete="email"
+        />
+        <Input
+          id="reg-password"
+          label="Password"
+          showPasswordToggle
+          placeholder="Create a password"
+          value={fields.password}
+          onChange={set('password')}
+          error={errors.password}
+          required
+          autoComplete="new-password"
+        />
+        <Input
+          id="reg-confirm"
+          label="Confirm Password"
+          showPasswordToggle
+          placeholder="Confirm your password"
+          value={fields.confirmPassword}
+          onChange={set('confirmPassword')}
+          error={errors.confirmPassword}
+          required
+          autoComplete="new-password"
+        />
+        
+        <Button type="submit" variant="primary" size="xl" fullWidth loading={loading} disabled={loading} style={{ marginTop: 8 }}>
+          {loading ? 'Creating account...' : 'Create Account'}
+        </Button>
+      </form>
 
-          {formError && (
-            <div className="form-error-banner" role="alert" style={{ marginBottom: 20 }}>
-              ⚠️ {formError}
-            </div>
-          )}
-
-          <form className="auth-form" onSubmit={handleSubmit} noValidate>
-            <Input id="reg-fullname" label="Full name" type="text" placeholder="Jane Smith"
-              value={fields.fullName} onChange={set('fullName')} error={errors.fullName} required autoComplete="name" />
-            <Input id="reg-business" label="Business / Company name" type="text" placeholder="Your Business Ltd"
-              value={fields.businessName} onChange={set('businessName')} error={errors.businessName} required autoComplete="organization" />
-            <Input id="reg-email" label="Work email" type="email" placeholder="you@company.com"
-              value={fields.email} onChange={set('email')} error={errors.email} required autoComplete="email" />
-            <Input id="reg-password" label="Password" showPasswordToggle placeholder="Min. 8 characters"
-              value={fields.password} onChange={set('password')} error={errors.password}
-              hint={!errors.password ? 'At least 8 characters.' : undefined} required autoComplete="new-password" />
-            <Input id="reg-confirm" label="Confirm password" showPasswordToggle placeholder="Repeat your password"
-              value={fields.confirmPassword} onChange={set('confirmPassword')} error={errors.confirmPassword}
-              required autoComplete="new-password" />
-
-            <Button type="submit" variant="primary" size="lg" fullWidth loading={loading} disabled={loading}>
-              {loading ? 'Creating account…' : 'Create Account'}
-            </Button>
-
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'center', lineHeight: 1.6 }}>
-              By creating an account you agree to our{' '}
-              <a href="#" style={{ color: 'var(--color-primary)' }}>Terms of Service</a> and{' '}
-              <a href="#" style={{ color: 'var(--color-primary)' }}>Privacy Policy</a>.
-            </p>
-          </form>
-
-          <div className="auth-form-footer">
-            Already have an account? <Link to="/login">Sign in</Link>
-          </div>
-          <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
-            <Link to="/" style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>← Back to homepage</Link>
-          </div>
-        </div>
-      </div>
-    </div>
+      <AuthSocialButtons setFormError={setFormError} />
+    </AuthLayout>
   )
 }

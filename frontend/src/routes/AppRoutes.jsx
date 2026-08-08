@@ -14,6 +14,7 @@ import EnquiryDetail from '../pages/EnquiryDetail'
 import Quotations from '../pages/Quotations'
 import QuotationDetail from '../pages/QuotationDetail'
 import FollowUps from '../pages/FollowUps'
+import Approvals from '../pages/Approvals'
 
 export default function AppRoutes() {
   return (
@@ -32,6 +33,7 @@ export default function AppRoutes() {
         <Route path="/quotations" element={<ProtectedRoute><Quotations /></ProtectedRoute>} />
         <Route path="/quotations/:id" element={<ProtectedRoute><QuotationDetail /></ProtectedRoute>} />
         <Route path="/followups" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />
+        <Route path="/approvals" element={<ProtectedRoute><Approvals /></ProtectedRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
