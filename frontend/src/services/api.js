@@ -25,12 +25,15 @@ async function parseResponse(res) {
   }
 
   if (!res.ok) {
+    // Backend sends: { success: false, error: { code: '...', message: '...' } }
+    // Fall back to: body.message or generic text
     const message =
-      (body && (body.message || body.error)) ||
+      (body && (body?.error?.message || body.message || body.error)) ||
       `Request failed with status ${res.status}`
     const err = new Error(message)
     err.status = res.status
     err.body = body
+    err.code = body?.error?.code
     throw err
   }
 
