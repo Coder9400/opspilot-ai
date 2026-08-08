@@ -16,7 +16,7 @@ const app = express();
 
 const allowedOrigins = env.isProduction
   ? [env.CLIENT_URL]
-  : [env.CLIENT_URL, 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4200'];
+  : [env.CLIENT_URL, 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4200', 'http://localhost:4000'];
 
 app.use(
   cors({
@@ -45,6 +45,7 @@ app.get('/health', (_req, res) => {
     version: '1.0.0',
     environment: env.NODE_ENV,
     aiProvider: env.AI_PROVIDER,
+    database: 'supabase',
     timestamp: new Date().toISOString(),
   });
 });

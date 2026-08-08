@@ -1,41 +1,34 @@
-import { prisma } from '../config/prisma';
+import { supabase, assertNoDbError, rowToCamel, rowsToCamel } from '../config/supabase';
 import { CreateEnquiryInput, EnquiryFilterInput } from '../validators/enquiry.validator';
 import { AIService } from '../ai/ai.service';
 import { NotFoundError, ForbiddenError, AIError } from '../utils/errors';
-import { EnquiryAnalysis } from '../ai/ai.types';
-import { Prisma } from '@prisma/client';
+import { EnquiryAnalysis, EnquiryContext } from '../ai/ai.types';
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── Table name constants ─────────────────────────────────────────────────────
 
-function buildEnquiryContext(enquiry: {
-  rawContent: string;
-  customerName: string | null;
-  customerEmail: string | null;
-  customerPhone: string | null;
-  requirements: Prisma.JsonValue | null;
-  budget: number | null;
-  currency: string | null;
-  timeline: string | null;
-  priority: string | null;
-  missingQuestions: Prisma.JsonValue | null;
-  aiSummary: string | null;
-}) {
+const T = {
+  ENQUIRIES: 'enquiries',
+  QUOTATIONS: 'quotations',
+  FOLLOW_UPS: 'follow_ups',
+  APPROVALS: 'approvals',
+} as const;
+
+// ─── Context builder for AI calls ─────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildEnquiryContext(row: Record<string, any>): EnquiryContext {
   return {
-    rawContent: enquiry.rawContent,
-    customerName: enquiry.customerName,
-    customerEmail: enquiry.customerEmail,
-    customerPhone: enquiry.customerPhone,
-    requirements: Array.isArray(enquiry.requirements)
-      ? (enquiry.requirements as string[])
-      : undefined,
-    budget: enquiry.budget,
-    currency: enquiry.currency,
-    timeline: enquiry.timeline,
-    priority: enquiry.priority,
-    missingQuestions: Array.isArray(enquiry.missingQuestions)
-      ? (enquiry.missingQuestions as string[])
-      : undefined,
-    aiSummary: enquiry.aiSummary,
+    rawContent: row.raw_content,
+    customerName: row.customer_name,
+    customerEmail: row.customer_email,
+    customerPhone: row.customer_phone,
+    requirements: Array.isArray(row.requirements) ? row.requirements : undefined,
+    budget: row.budget,
+    currency: row.currency,
+    timeline: row.timeline,
+    priority: row.priority,
+    missingQuestions: Array.isArray(row.missing_questions) ? row.missing_questions : undefined,
+    aiSummary: row.ai_summary,
   };
 }
 
@@ -45,14 +38,20 @@ export const EnquiryService = {
   // ── Create ────────────────────────────────────────────────────────────────
 
   async create(userId: string, input: CreateEnquiryInput) {
-    return prisma.enquiry.create({
-      data: {
-        userId,
-        rawContent: input.content,
-        sourceType: input.sourceType,
+    const { data, error } = await supabase
+      .from(T.ENQUIRIES)
+      .insert({
+        user_id: userId,
+        raw_content: input.content,
+        source_type: input.sourceType ?? 'TEXT',
         status: 'NEW',
-      },
-    });
+        priority: 'MEDIUM',
+      })
+      .select()
+      .single();
+
+    assertNoDbError(error, 'Enquiry create');
+    return rowToCamel(data as Record<string, unknown>);
   },
 
   // ── List ──────────────────────────────────────────────────────────────────
@@ -61,27 +60,34 @@ export const EnquiryService = {
     const { status, priority, page, limit } = filter;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.EnquiryWhereInput = { userId };
-    if (status) where.status = status;
-    if (priority) where.priority = priority;
+    // Count query
+    let countQuery = supabase
+      .from(T.ENQUIRIES)
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+    if (status) countQuery = countQuery.eq('status', status);
+    if (priority) countQuery = countQuery.eq('priority', priority);
 
-    const [total, enquiries] = await Promise.all([
-      prisma.enquiry.count({ where }),
-      prisma.enquiry.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          _count: {
-            select: { quotations: true, followUps: true, approvals: true },
-          },
-        },
-      }),
-    ]);
+    const { count, error: countError } = await countQuery;
+    assertNoDbError(countError, 'Enquiry count');
 
+    // Data query
+    let dataQuery = supabase
+      .from(T.ENQUIRIES)
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(skip, skip + limit - 1);
+
+    if (status) dataQuery = dataQuery.eq('status', status);
+    if (priority) dataQuery = dataQuery.eq('priority', priority);
+
+    const { data, error: dataError } = await dataQuery;
+    assertNoDbError(dataError, 'Enquiry list');
+
+    const total = count ?? 0;
     return {
-      enquiries,
+      enquiries: rowsToCamel(data as Record<string, unknown>[]),
       pagination: {
         total,
         page,
@@ -91,97 +97,126 @@ export const EnquiryService = {
     };
   },
 
-  // ── Get By ID ─────────────────────────────────────────────────────────────
+  // ── Get By ID (with relations) ────────────────────────────────────────────
 
   async findById(id: string, userId: string) {
-    const enquiry = await prisma.enquiry.findUnique({
-      where: { id },
-      include: {
-        quotations: { orderBy: { createdAt: 'desc' } },
-        followUps: { orderBy: { dueDate: 'asc' } },
-        approvals: { orderBy: { createdAt: 'desc' } },
-      },
-    });
+    const { data, error } = await supabase
+      .from(T.ENQUIRIES)
+      .select(`
+        *,
+        quotations (*),
+        follow_ups (*),
+        approvals (*)
+      `)
+      .eq('id', id)
+      .single();
 
-    if (!enquiry) throw new NotFoundError('Enquiry');
-    if (enquiry.userId !== userId) throw new ForbiddenError('You do not have access to this enquiry');
+    assertNoDbError(error, 'Enquiry');
+    if (!data) throw new NotFoundError('Enquiry');
 
-    return enquiry;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = data as Record<string, any>;
+    if (row.user_id !== userId) throw new ForbiddenError('You do not have access to this enquiry');
+
+    return rowToCamel(row);
   },
 
   // ── Analyze ───────────────────────────────────────────────────────────────
 
   async analyze(id: string, userId: string) {
-    const enquiry = await prisma.enquiry.findUnique({ where: { id } });
-    if (!enquiry) throw new NotFoundError('Enquiry');
-    if (enquiry.userId !== userId) throw new ForbiddenError('You do not have access to this enquiry');
+    // Ownership check
+    const { data: existing, error: findError } = await supabase
+      .from(T.ENQUIRIES)
+      .select('id, user_id, raw_content, status')
+      .eq('id', id)
+      .single();
+
+    assertNoDbError(findError, 'Enquiry');
+    if (!existing) throw new NotFoundError('Enquiry');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = existing as Record<string, any>;
+    if (row.user_id !== userId) throw new ForbiddenError('You do not have access to this enquiry');
 
     // Mark as analyzing
-    await prisma.enquiry.update({ where: { id }, data: { status: 'ANALYZING' } });
+    await supabase.from(T.ENQUIRIES).update({ status: 'ANALYZING' }).eq('id', id);
 
     let analysis: EnquiryAnalysis;
     try {
-      analysis = await AIService.analyzeEnquiry(enquiry.rawContent);
+      analysis = await AIService.analyzeEnquiry(row.raw_content);
     } catch (err) {
-      // Restore safe status on AI failure
-      await prisma.enquiry.update({ where: { id }, data: { status: 'NEW' } });
+      await supabase.from(T.ENQUIRIES).update({ status: 'NEW' }).eq('id', id);
       throw err;
     }
 
     // Validate priority
     if (!['LOW', 'MEDIUM', 'HIGH'].includes(analysis.priority)) {
-      await prisma.enquiry.update({ where: { id }, data: { status: 'NEW' } });
+      await supabase.from(T.ENQUIRIES).update({ status: 'NEW' }).eq('id', id);
       throw new AIError(`AI returned an invalid priority: "${analysis.priority}"`);
     }
 
-    const updated = await prisma.enquiry.update({
-      where: { id },
-      data: {
-        customerName: analysis.customerName,
-        customerEmail: analysis.customerEmail,
-        customerPhone: analysis.customerPhone,
+    const { data: updated, error: updateError } = await supabase
+      .from(T.ENQUIRIES)
+      .update({
+        customer_name: analysis.customerName,
+        customer_email: analysis.customerEmail,
+        customer_phone: analysis.customerPhone,
         requirements: analysis.requirements,
         budget: analysis.budget,
         currency: analysis.currency,
         timeline: analysis.timeline,
         priority: analysis.priority,
-        missingQuestions: analysis.missingQuestions,
-        aiSummary: analysis.summary,
+        missing_questions: analysis.missingQuestions,
+        ai_summary: analysis.summary,
         status: 'REVIEW',
-      },
-    });
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
 
-    return { enquiry: updated, analysis };
+    assertNoDbError(updateError, 'Enquiry update');
+    return { enquiry: rowToCamel(updated as Record<string, unknown>), analysis };
   },
 
   // ── Generate Response ─────────────────────────────────────────────────────
 
   async generateResponse(id: string, userId: string) {
-    const enquiry = await prisma.enquiry.findUnique({ where: { id } });
-    if (!enquiry) throw new NotFoundError('Enquiry');
-    if (enquiry.userId !== userId) throw new ForbiddenError('You do not have access to this enquiry');
+    const { data: existing, error: findError } = await supabase
+      .from(T.ENQUIRIES)
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    const context = buildEnquiryContext(enquiry);
+    assertNoDbError(findError, 'Enquiry');
+    if (!existing) throw new NotFoundError('Enquiry');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = existing as Record<string, any>;
+    if (row.user_id !== userId) throw new ForbiddenError('You do not have access to this enquiry');
+
+    const context = buildEnquiryContext(row);
     const result = await AIService.generateResponse(context);
 
-    // Store the generated response on the enquiry
-    await prisma.enquiry.update({
-      where: { id },
-      data: { generatedResponse: result.response },
-    });
+    await supabase
+      .from(T.ENQUIRIES)
+      .update({ generated_response: result.response, updated_at: new Date().toISOString() })
+      .eq('id', id);
 
-    // Create an approval record for sending this response
-    const existingApproval = await prisma.approval.findFirst({
-      where: { enquiryId: id, actionType: 'SEND_RESPONSE', status: 'PENDING' },
-    });
+    // Create approval record (idempotent — only if not already pending)
+    const { data: existingApproval } = await supabase
+      .from(T.APPROVALS)
+      .select('id')
+      .eq('enquiry_id', id)
+      .eq('action_type', 'SEND_RESPONSE')
+      .eq('status', 'PENDING')
+      .maybeSingle();
 
     if (!existingApproval) {
-      await prisma.approval.create({
-        data: {
-          enquiryId: id,
-          actionType: 'SEND_RESPONSE',
-          status: 'PENDING',
-        },
+      await supabase.from(T.APPROVALS).insert({
+        enquiry_id: id,
+        action_type: 'SEND_RESPONSE',
+        status: 'PENDING',
       });
     }
 
@@ -191,73 +226,95 @@ export const EnquiryService = {
   // ── Generate Quotation ────────────────────────────────────────────────────
 
   async generateQuotation(id: string, userId: string) {
-    const enquiry = await prisma.enquiry.findUnique({ where: { id } });
-    if (!enquiry) throw new NotFoundError('Enquiry');
-    if (enquiry.userId !== userId) throw new ForbiddenError('You do not have access to this enquiry');
+    const { data: existing, error: findError } = await supabase
+      .from(T.ENQUIRIES)
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    const context = buildEnquiryContext(enquiry);
+    assertNoDbError(findError, 'Enquiry');
+    if (!existing) throw new NotFoundError('Enquiry');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = existing as Record<string, any>;
+    if (row.user_id !== userId) throw new ForbiddenError('You do not have access to this enquiry');
+
+    const context = buildEnquiryContext(row);
     const result = await AIService.generateQuotation(context);
 
     if (!result.items || !Array.isArray(result.items) || result.items.length === 0) {
       throw new AIError('AI generated an invalid quotation: items array is empty or missing');
     }
 
-    const quotation = await prisma.quotation.create({
-      data: {
-        enquiryId: id,
+    const { data: quotation, error: quotationError } = await supabase
+      .from(T.QUOTATIONS)
+      .insert({
+        enquiry_id: id,
         title: result.title,
         description: result.description,
-        items: result.items as unknown as Prisma.InputJsonValue,
+        items: result.items,
         subtotal: result.subtotal,
         tax: result.tax,
         total: result.total,
         currency: result.currency || 'INR',
-        validityDays: result.validityDays || 30,
+        validity_days: result.validityDays || 30,
         notes: result.notes,
-        status: 'PENDING_APPROVAL', // Always starts as pending — human must approve
-      },
+        status: 'PENDING_APPROVAL',
+      })
+      .select()
+      .single();
+
+    assertNoDbError(quotationError, 'Quotation create');
+
+    // Create pending approval
+    await supabase.from(T.APPROVALS).insert({
+      enquiry_id: id,
+      quotation_id: (quotation as Record<string, unknown>).id,
+      action_type: 'SEND_QUOTATION',
+      status: 'PENDING',
     });
 
-    // Create a pending approval for this quotation
-    await prisma.approval.create({
-      data: {
-        enquiryId: id,
-        quotationId: quotation.id,
-        actionType: 'SEND_QUOTATION',
-        status: 'PENDING',
-      },
-    });
-
-    return quotation;
+    return rowToCamel(quotation as Record<string, unknown>);
   },
 
   // ── Generate Follow-Ups ───────────────────────────────────────────────────
 
   async generateFollowUps(id: string, userId: string) {
-    const enquiry = await prisma.enquiry.findUnique({ where: { id } });
-    if (!enquiry) throw new NotFoundError('Enquiry');
-    if (enquiry.userId !== userId) throw new ForbiddenError('You do not have access to this enquiry');
+    const { data: existing, error: findError } = await supabase
+      .from(T.ENQUIRIES)
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    const context = buildEnquiryContext(enquiry);
+    assertNoDbError(findError, 'Enquiry');
+    if (!existing) throw new NotFoundError('Enquiry');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = existing as Record<string, any>;
+    if (row.user_id !== userId) throw new ForbiddenError('You do not have access to this enquiry');
+
+    const context = buildEnquiryContext(row);
     const result = await AIService.generateFollowUps(context);
 
     const now = new Date();
-    const followUps = await Promise.all(
-      result.followUps.map((fu) => {
-        const dueDate = new Date(now);
-        dueDate.setDate(dueDate.getDate() + (fu.daysFromNow || 1));
-        return prisma.followUp.create({
-          data: {
-            enquiryId: id,
-            title: fu.title,
-            description: fu.description,
-            dueDate,
-            status: 'PENDING',
-          },
-        });
-      })
-    );
+    const inserts = result.followUps.map((fu) => {
+      const dueDate = new Date(now);
+      dueDate.setDate(dueDate.getDate() + (fu.daysFromNow ?? 1));
+      return {
+        enquiry_id: id,
+        title: fu.title,
+        description: fu.description,
+        due_date: dueDate.toISOString(),
+        status: 'PENDING',
+      };
+    });
 
-    return { followUps };
+    const { data: followUps, error: fuError } = await supabase
+      .from(T.FOLLOW_UPS)
+      .insert(inserts)
+      .select();
+
+    assertNoDbError(fuError, 'Follow-up create');
+    return { followUps: rowsToCamel(followUps as Record<string, unknown>[]) };
   },
 };

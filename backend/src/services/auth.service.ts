@@ -1,85 +1,97 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { prisma } from '../config/prisma';
-import { env } from '../config/env';
+import { supabase } from '../config/supabase';
 import { RegisterInput, LoginInput } from '../validators/auth.validator';
 import { AuthError, ConflictError } from '../utils/errors';
-import { AuthenticatedUser } from '../types';
 
-const SALT_ROUNDS = 12;
-
-// Never return passwordHash in API responses
-type SafeUser = Omit<{ id: string; name: string; email: string; createdAt: Date; updatedAt: Date; passwordHash: string }, 'passwordHash'>;
-
-function omitPassword(user: {
-  id: string;
-  name: string;
-  email: string;
-  createdAt: Date;
-  updatedAt: Date;
-  passwordHash: string;
-}): SafeUser {
-  const { passwordHash: _ignored, ...safe } = user;
-  return safe;
-}
-
-function signToken(user: { id: string; email: string; name: string }): string {
-  const payload: AuthenticatedUser = {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-  };
-  return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRES_IN,
-  } as jwt.SignOptions);
-}
+// ─── Auth Service (Supabase Auth) ─────────────────────────────────────────────
 
 export const AuthService = {
+  // ── Register ───────────────────────────────────────────────────────────────
+
   async register(input: RegisterInput) {
-    const existing = await prisma.user.findUnique({
-      where: { email: input.email },
-    });
-
-    if (existing) {
-      throw new ConflictError('An account with this email address already exists');
-    }
-
-    const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
-
-    const user = await prisma.user.create({
-      data: {
-        name: input.name,
-        email: input.email,
-        passwordHash,
+    const { data, error } = await supabase.auth.signUp({
+      email: input.email,
+      password: input.password,
+      options: {
+        data: {
+          name: input.name,
+        },
       },
     });
 
-    const token = signToken(user);
-    return { user: omitPassword(user), token };
+    if (error) {
+      // Supabase returns "User already registered" if email exists
+      if (
+        error.message.toLowerCase().includes('already registered') ||
+        error.message.toLowerCase().includes('already exists')
+      ) {
+        throw new ConflictError('An account with this email address already exists');
+      }
+      throw new AuthError(error.message);
+    }
+
+    if (!data.user || !data.session) {
+      // Supabase email confirmation is enabled — user needs to verify email
+      return {
+        user: {
+          id: data.user?.id ?? '',
+          email: input.email,
+          name: input.name,
+        },
+        token: null,
+        message: 'Registration successful. Please check your email to confirm your account.',
+        requiresEmailConfirmation: true,
+      };
+    }
+
+    return {
+      user: {
+        id: data.user.id,
+        email: data.user.email ?? input.email,
+        name: (data.user.user_metadata?.name as string) ?? input.name,
+      },
+      token: data.session.access_token,
+      requiresEmailConfirmation: false,
+    };
   },
 
+  // ── Login ──────────────────────────────────────────────────────────────────
+
   async login(input: LoginInput) {
-    const user = await prisma.user.findUnique({
-      where: { email: input.email },
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: input.email,
+      password: input.password,
     });
 
-    // Use constant-time comparison to prevent timing attacks
-    const dummyHash =
-      '$2a$12$invalidhashfortimingattackprevention00000000000000000000';
-    const passwordHash = user?.passwordHash ?? dummyHash;
-    const isValid = await bcrypt.compare(input.password, passwordHash);
-
-    if (!user || !isValid) {
+    if (error) {
+      // Always return generic message to prevent user enumeration
       throw new AuthError('Invalid email or password');
     }
 
-    const token = signToken(user);
-    return { user: omitPassword(user), token };
+    if (!data.session) {
+      throw new AuthError('Login failed — no session returned');
+    }
+
+    return {
+      user: {
+        id: data.user.id,
+        email: data.user.email ?? input.email,
+        name: (data.user.user_metadata?.name as string) ?? '',
+      },
+      token: data.session.access_token,
+    };
   },
 
-  async me(userId: string) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new AuthError('User account not found');
-    return omitPassword(user);
+  // ── Get current user ───────────────────────────────────────────────────────
+
+  async me(userId: string, token: string) {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) throw new AuthError('User account not found or session expired');
+    if (data.user.id !== userId) throw new AuthError('Session mismatch');
+
+    return {
+      id: data.user.id,
+      email: data.user.email ?? '',
+      name: (data.user.user_metadata?.name as string) ?? '',
+    };
   },
 };

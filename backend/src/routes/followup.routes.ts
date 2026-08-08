@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middlewares/auth.middleware';
-import { prisma } from '../config/prisma';
+import { supabase, assertNoDbError, rowToCamel, rowsToCamel } from '../config/supabase';
 import { sendSuccess } from '../utils/response';
 import { NotFoundError, ForbiddenError } from '../utils/errors';
 import { AuthRequest } from '../types';
@@ -9,48 +9,69 @@ import { Response, NextFunction } from 'express';
 const router = Router();
 router.use(authenticate);
 
-// GET /api/followups — all follow-ups for authenticated user
+// GET /api/followups
 router.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const statusParam = req.query.status as string | undefined;
     const allowedStatuses = ['PENDING', 'COMPLETED', 'CANCELLED'];
-    const statusFilter =
-      statusParam && allowedStatuses.includes(statusParam)
-        ? (statusParam as 'PENDING' | 'COMPLETED' | 'CANCELLED')
-        : undefined;
 
-    const followUps = await prisma.followUp.findMany({
-      where: {
-        enquiry: { userId: req.user!.id },
-        ...(statusFilter ? { status: statusFilter } : {}),
-      },
-      include: {
-        enquiry: { select: { customerName: true, priority: true, status: true } },
-      },
-      orderBy: { dueDate: 'asc' },
-    });
-    sendSuccess(res, { followUps });
+    let query = supabase
+      .from('follow_ups')
+      .select(`
+        *,
+        enquiries!inner (
+          customer_name,
+          priority,
+          status,
+          user_id
+        )
+      `)
+      .eq('enquiries.user_id', req.user!.id)
+      .order('due_date', { ascending: true });
+
+    if (statusParam && allowedStatuses.includes(statusParam)) {
+      query = query.eq('status', statusParam);
+    }
+
+    const { data, error } = await query;
+    assertNoDbError(error, 'Follow-ups');
+    sendSuccess(res, { followUps: rowsToCamel(data as Record<string, unknown>[]) });
   } catch (err) {
     next(err);
   }
 });
 
-// PATCH /api/followups/:id — update follow-up status
+// PATCH /api/followups/:id — update status
 router.patch('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const followUpWithEnquiry = await prisma.followUp.findUnique({
-      where: { id: req.params.id as string },
-      include: { enquiry: { select: { userId: true } } },
-    });
-    if (!followUpWithEnquiry) throw new NotFoundError('Follow-up');
-    if (followUpWithEnquiry.enquiry.userId !== req.user!.id) throw new ForbiddenError();
+    const { data: existing, error: findErr } = await supabase
+      .from('follow_ups')
+      .select('id, enquiries!inner(user_id)')
+      .eq('id', req.params.id as string)
+      .single();
 
-    const { status } = req.body as { status: 'PENDING' | 'COMPLETED' | 'CANCELLED' };
-    const updated = await prisma.followUp.update({
-      where: { id: req.params.id as string },
-      data: { status },
-    });
-    sendSuccess(res, { followUp: updated });
+    assertNoDbError(findErr, 'Follow-up');
+    if (!existing) throw new NotFoundError('Follow-up');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = existing as Record<string, any>;
+    if (row.enquiries?.user_id !== req.user!.id) throw new ForbiddenError();
+
+    const allowedStatuses = ['PENDING', 'COMPLETED', 'CANCELLED'];
+    const { status } = req.body as { status: string };
+    if (!allowedStatuses.includes(status)) {
+      throw new Error(`Invalid status. Must be one of: ${allowedStatuses.join(', ')}`);
+    }
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('follow_ups')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id as string)
+      .select()
+      .single();
+
+    assertNoDbError(updateErr, 'Follow-up update');
+    sendSuccess(res, { followUp: rowToCamel(updated as Record<string, unknown>) });
   } catch (err) {
     next(err);
   }

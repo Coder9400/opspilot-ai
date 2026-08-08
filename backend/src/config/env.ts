@@ -18,16 +18,15 @@ function optionalEnv(key: string, fallback: string): string {
   return process.env[key] || fallback;
 }
 
-export type AIProvider = 'gemini' | 'mock';
+export type AIProviderType = 'mistral' | 'mock';
 
 export const env = {
-  DATABASE_URL: requireEnv('DATABASE_URL'),
-  JWT_SECRET: requireEnv('JWT_SECRET'),
-  JWT_EXPIRES_IN: optionalEnv('JWT_EXPIRES_IN', '7d'),
-  AI_PROVIDER: optionalEnv('AI_PROVIDER', 'mock') as AIProvider,
-  AI_API_KEY: optionalEnv('AI_API_KEY', ''),
-  PORT: parseInt(optionalEnv('PORT', '5000'), 10),
-  CLIENT_URL: optionalEnv('CLIENT_URL', 'http://localhost:3000'),
+  SUPABASE_URL: requireEnv('SUPABASE_URL'),
+  SUPABASE_ANON_KEY: requireEnv('SUPABASE_ANON_KEY'),
+  MISTRAL_API_KEY: optionalEnv('MISTRAL_API_KEY', ''),
+  AI_PROVIDER: optionalEnv('AI_PROVIDER', 'mistral') as AIProviderType,
+  PORT: parseInt(optionalEnv('PORT', '4000'), 10),
+  CLIENT_URL: optionalEnv('CLIENT_URL', 'http://localhost:5173'),
   NODE_ENV: optionalEnv('NODE_ENV', 'development'),
   isProduction: optionalEnv('NODE_ENV', 'development') === 'production',
 };

@@ -1,18 +1,20 @@
 import { Request } from 'express';
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
+// ─── Authenticated User (from Supabase JWT) ───────────────────────────────────
 
 export interface AuthenticatedUser {
-  id: string;
+  id: string;        // Supabase auth.users UUID
   email: string;
-  name: string;
+  name: string;      // from user_metadata.name
 }
+
+// ─── Extended Express Request ─────────────────────────────────────────────────
 
 export interface AuthRequest extends Request {
   user?: AuthenticatedUser;
 }
 
-// ─── API Response Shape ────────────────────────────────────────────────────────
+// ─── API Response types ────────────────────────────────────────────────────────
 
 export interface ApiSuccess<T> {
   success: true;
@@ -26,15 +28,4 @@ export interface ApiErrorPayload {
     message: string;
     details?: unknown;
   };
-}
-
-export type ApiResponse<T> = ApiSuccess<T> | ApiErrorPayload;
-
-// ─── Pagination ───────────────────────────────────────────────────────────────
-
-export interface PaginationMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
 }

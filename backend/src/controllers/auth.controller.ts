@@ -34,7 +34,8 @@ export const AuthController = {
 
   async me(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const user = await AuthService.me(req.user!.id);
+      const token = req.headers.authorization?.slice(7) ?? '';
+      const user = await AuthService.me(req.user!.id, token);
       sendSuccess(res, { user });
     } catch (err) {
       next(err);

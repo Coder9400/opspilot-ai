@@ -1,4 +1,4 @@
-import { env } from '../config/env';
+import { env, AIProviderType } from '../config/env';
 import {
   AIProvider,
   EnquiryAnalysis,
@@ -7,7 +7,7 @@ import {
   GeneratedFollowUps,
   EnquiryContext,
 } from './ai.types';
-import { GeminiProvider } from './providers/gemini.provider';
+import { MistralProvider } from './providers/mistral.provider';
 import { MockProvider } from './providers/mock.provider';
 import { AIError } from '../utils/errors';
 
@@ -18,18 +18,19 @@ let _provider: AIProvider | null = null;
 function getProvider(): AIProvider {
   if (_provider) return _provider;
 
-  switch (env.AI_PROVIDER) {
-    case 'gemini':
-      console.log('[AI] Provider: Gemini 1.5 Flash');
-      _provider = new GeminiProvider();
+  const providerName = env.AI_PROVIDER as AIProviderType;
+  switch (providerName) {
+    case 'mistral':
+      console.log('[AI] Provider: Mistral (mistral-small-latest)');
+      _provider = new MistralProvider();
       break;
     case 'mock':
-      console.log('[AI] Provider: Mock (deterministic demo mode — set AI_PROVIDER=gemini for real AI)');
+      console.log('[AI] Provider: Mock (deterministic demo — set AI_PROVIDER=mistral for real AI)');
       _provider = new MockProvider();
       break;
     default:
       throw new AIError(
-        `Unknown AI provider: "${env.AI_PROVIDER}". Valid options are: gemini, mock`
+        `Unknown AI provider: "${providerName}". Valid options are: mistral, mock`
       );
   }
 
