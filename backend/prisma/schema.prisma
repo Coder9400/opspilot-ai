@@ -1,0 +1,172 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum SourceType {
+  TEXT
+  EMAIL
+  DOCUMENT
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum EnquiryStatus {
+  NEW
+  ANALYZING
+  REVIEW
+  APPROVED
+  COMPLETED
+}
+
+enum QuotationStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum FollowUpStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  enquiries Enquiry[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model Enquiry {
+  id                String        @id @default(cuid())
+  userId            String
+  rawContent        String        @db.Text
+  sourceType        SourceType    @default(TEXT)
+
+  // Extracted customer info
+  customerName      String?
+  customerEmail     String?
+  customerPhone     String?
+
+  // AI-extracted fields
+  requirements      Json?         // string[]
+  budget            Float?
+  currency          String?       @default("INR")
+  timeline          String?
+  priority          Priority?     @default(MEDIUM)
+  missingQuestions  Json?         // string[]
+  aiSummary         String?       @db.Text
+  generatedResponse String?       @db.Text
+
+  // Workflow status
+  status            EnquiryStatus @default(NEW)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quotations Quotation[]
+  followUps  FollowUp[]
+  approvals  Approval[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([priority])
+  @@index([userId, status])
+  @@map("enquiries")
+}
+
+model Quotation {
+  id           String          @id @default(cuid())
+  enquiryId    String
+  title        String
+  description  String?         @db.Text
+  items        Json            // QuotationItem[]
+  subtotal     Float
+  tax          Float           @default(0)
+  total        Float
+  currency     String          @default("INR")
+  validityDays Int             @default(30)
+  notes        String?         @db.Text
+  status       QuotationStatus @default(PENDING_APPROVAL)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  enquiry   Enquiry    @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  approvals Approval[]
+
+  @@index([enquiryId])
+  @@index([status])
+  @@map("quotations")
+}
+
+model FollowUp {
+  id          String         @id @default(cuid())
+  enquiryId   String
+  title       String
+  description String?        @db.Text
+  dueDate     DateTime?
+  status      FollowUpStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  enquiry Enquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+
+  @@index([enquiryId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("follow_ups")
+}
+
+model Approval {
+  id          String         @id @default(cuid())
+  enquiryId   String
+  quotationId String?
+  approvedBy  String?        // userId of approver
+  actionType  String         // SEND_RESPONSE | SEND_QUOTATION | COMPLETE_WORKFLOW
+  status      ApprovalStatus @default(PENDING)
+  comments    String?        @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  enquiry   Enquiry    @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  quotation Quotation? @relation(fields: [quotationId], references: [id])
+
+  @@index([enquiryId])
+  @@index([status])
+  @@index([actionType])
+  @@map("approvals")
+}
