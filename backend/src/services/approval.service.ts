@@ -1,6 +1,7 @@
 import { supabase, assertNoDbError, rowToCamel } from '../config/supabase';
 import { ApprovalActionInput } from '../validators/approval.validator';
 import { NotFoundError, ForbiddenError } from '../utils/errors';
+import * as crypto from 'crypto';
 
 const T = {
   ENQUIRIES: 'enquiries',
@@ -8,11 +9,15 @@ const T = {
   APPROVALS: 'approvals',
 } as const;
 
+/** Generate a secure, URL-safe share token */
+function generateShareToken(): string {
+  return crypto.randomBytes(24).toString('base64url');
+}
+
 export const ApprovalService = {
   // ── Get approval status for an enquiry ────────────────────────────────────
 
   async getApproval(enquiryId: string, userId: string) {
-    // Verify ownership
     const { data: enquiry, error: eErr } = await supabase
       .from(T.ENQUIRIES)
       .select('id, user_id, status')
@@ -56,7 +61,7 @@ export const ApprovalService = {
     // Ownership check
     const { data: enquiry, error: eErr } = await supabase
       .from(T.ENQUIRIES)
-      .select('id, user_id, status')
+      .select('id, user_id, status, customer_name, customer_email')
       .eq('id', enquiryId)
       .single();
 
@@ -78,7 +83,6 @@ export const ApprovalService = {
     if (existingApproval) {
       approvalId = (existingApproval as Record<string, unknown>).id as string;
     } else {
-      // Find the latest pending quotation if applicable
       let quotationId: string | null = null;
       if (input.actionType === 'SEND_QUOTATION') {
         const { data: q } = await supabase
@@ -122,7 +126,10 @@ export const ApprovalService = {
 
     assertNoDbError(updateErr, 'Approval update');
 
-    // Side effects
+    // Side effects — generate share token when sending quotation
+    let shareToken: string | null = null;
+    let shareUrl: string | null = null;
+
     if (input.actionType === 'SEND_QUOTATION') {
       const { data: q } = await supabase
         .from(T.APPROVALS)
@@ -132,7 +139,26 @@ export const ApprovalService = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const qId = (q as any)?.quotation_id;
       if (qId) {
-        await supabase.from(T.QUOTATIONS).update({ status: 'APPROVED' }).eq('id', qId);
+        // Generate a secure share token for the quotation
+        shareToken = generateShareToken();
+
+        // Try to update with share_token (column may not exist yet)
+        try {
+          await supabase.from(T.QUOTATIONS)
+            .update({ status: 'APPROVED', share_token: shareToken })
+            .eq('id', qId);
+        } catch {
+          // Fallback if share_token column doesn't exist yet
+          await supabase.from(T.QUOTATIONS)
+            .update({ status: 'APPROVED' })
+            .eq('id', qId);
+          shareToken = null;
+        }
+
+        if (shareToken) {
+          const clientUrl = process.env.CLIENT_URL ?? 'http://localhost:5173';
+          shareUrl = `${clientUrl}/quotations/shared/${shareToken}`;
+        }
       }
     }
 
@@ -143,15 +169,45 @@ export const ApprovalService = {
       .update({ status: newEnquiryStatus, updated_at: new Date().toISOString() })
       .eq('id', enquiryId);
 
+    const message =
+      input.actionType === 'SEND_RESPONSE'
+        ? 'Response approved. Ready to send to customer (simulated — no email sent).'
+        : input.actionType === 'SEND_QUOTATION'
+        ? `Quotation approved and shared.${shareUrl ? ` Share link: ${shareUrl}` : ''}`
+        : 'Workflow marked as completed.';
+
     return {
       approval: rowToCamel(updatedApproval as Record<string, unknown>),
-      message:
-        input.actionType === 'SEND_RESPONSE'
-          ? 'Response approved. Ready to send to customer (simulated — no email sent).'
-          : input.actionType === 'SEND_QUOTATION'
-          ? 'Quotation approved. Ready to send to customer (simulated — no email sent).'
-          : 'Workflow marked as completed.',
+      message,
+      ...(shareToken ? { shareToken, shareUrl } : {}),
     };
+  },
+
+  // ── Get shared quotation (public — no auth required) ──────────────────────
+
+  async getSharedQuotation(shareToken: string) {
+    const { data, error } = await supabase
+      .from(T.QUOTATIONS)
+      .select(`
+        *,
+        enquiries (
+          customer_name,
+          customer_email,
+          customer_phone,
+          ai_summary,
+          requirements,
+          timeline,
+          priority
+        )
+      `)
+      .eq('share_token', shareToken)
+      .single();
+
+    if (error || !data) throw new NotFoundError('Shared quotation not found or link has expired');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = data as Record<string, any>;
+    return rowToCamel(row);
   },
 
   // ── Reject an action ──────────────────────────────────────────────────────
@@ -168,7 +224,6 @@ export const ApprovalService = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((enquiry as any).user_id !== userId) throw new ForbiddenError('You do not have access to this enquiry');
 
-    // Find or create approval record
     const { data: existingApproval } = await supabase
       .from(T.APPROVALS)
       .select('id')
@@ -221,7 +276,6 @@ export const ApprovalService = {
       }
     }
 
-    // Return to REVIEW status
     await supabase
       .from(T.ENQUIRIES)
       .update({ status: 'REVIEW', updated_at: new Date().toISOString() })

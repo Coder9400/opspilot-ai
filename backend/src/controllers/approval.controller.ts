@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../types';
 import { ApprovalService } from '../services/approval.service';
-import { approvalActionSchema } from '../validators/approval.validator';
+import { approvalActionSchema, rejectActionSchema } from '../validators/approval.validator';
 import { sendSuccess } from '../utils/response';
 import { ValidationError } from '../utils/errors';
 
@@ -9,7 +9,9 @@ export const ApprovalController = {
   async getApproval(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await ApprovalService.getApproval(req.params.id as string, req.user!.id);
-      sendSuccess(res, result);
+      // Return a flat `approval` object the frontend reads via `approvalData.value?.approval`
+      const latest = result.pendingApprovals[0] ?? result.approvals[0] ?? null;
+      sendSuccess(res, { approval: latest, ...result });
     } catch (err) {
       next(err);
     }
@@ -30,7 +32,9 @@ export const ApprovalController = {
 
   async reject(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const parsed = approvalActionSchema.safeParse(req.body);
+      // Use rejectActionSchema — actionType defaults to SEND_QUOTATION
+      // so frontend can call with just { comments: "..." }
+      const parsed = rejectActionSchema.safeParse(req.body);
       if (!parsed.success) {
         throw new ValidationError('Invalid rejection data', parsed.error.flatten());
       }

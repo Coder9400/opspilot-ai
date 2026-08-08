@@ -15,12 +15,22 @@ export const DashboardController = {
     try {
       const userId = req.user!.id;
 
-      // Run all counts in parallel
+      // ── Step 1: Get enquiry IDs for this user ──────────────────────────────
+      // Using two-step approach because Supabase JS v2 cross-table
+      // .eq('joined_table.column', value) filters are unreliable.
+      const { data: enquiryRows } = await supabase
+        .from(T.ENQUIRIES)
+        .select('id')
+        .eq('user_id', userId);
+      const enquiryIds = (enquiryRows ?? []).map((r) => r.id as string);
+
+      // ── Step 2: Run all counts in parallel ─────────────────────────────────
       const [
         totalRes,
         newRes,
         analyzingRes,
         reviewRes,
+        pendingApprovalRes,
         approvedRes,
         completedRes,
         highRes,
@@ -32,44 +42,47 @@ export const DashboardController = {
         pendingFollowUpsRes,
         completedFollowUpsRes,
       ] = await Promise.all([
+        // Enquiry status/priority counts — safe because we filter by user_id directly
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'NEW'),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'ANALYZING'),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'REVIEW'),
+        supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'PENDING_APPROVAL'),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'APPROVED'),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'COMPLETED'),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('priority', 'HIGH'),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('priority', 'MEDIUM'),
         supabase.from(T.ENQUIRIES).select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('priority', 'LOW'),
-        // Approvals pending for this user's enquiries — filter by enquiry user_id via join
-        supabase.from(T.APPROVALS)
-          .select('*, enquiries!inner(user_id)', { count: 'exact', head: true })
-          .eq('enquiries.user_id', userId)
-          .eq('status', 'PENDING'),
-        supabase.from(T.QUOTATIONS)
-          .select('*, enquiries!inner(user_id)', { count: 'exact', head: true })
-          .eq('enquiries.user_id', userId),
-        supabase.from(T.QUOTATIONS)
-          .select('*, enquiries!inner(user_id)', { count: 'exact', head: true })
-          .eq('enquiries.user_id', userId)
-          .eq('status', 'APPROVED'),
-        supabase.from(T.FOLLOW_UPS)
-          .select('*, enquiries!inner(user_id)', { count: 'exact', head: true })
-          .eq('enquiries.user_id', userId)
-          .eq('status', 'PENDING'),
-        supabase.from(T.FOLLOW_UPS)
-          .select('*, enquiries!inner(user_id)', { count: 'exact', head: true })
-          .eq('enquiries.user_id', userId)
-          .eq('status', 'COMPLETED'),
+
+        // Child table counts — use .in(enquiryIds) when enquiries exist, else return 0
+        enquiryIds.length > 0
+          ? supabase.from(T.APPROVALS).select('*', { count: 'exact', head: true }).in('enquiry_id', enquiryIds).eq('status', 'PENDING')
+          : Promise.resolve({ count: 0, error: null }),
+
+        enquiryIds.length > 0
+          ? supabase.from(T.QUOTATIONS).select('*', { count: 'exact', head: true }).in('enquiry_id', enquiryIds)
+          : Promise.resolve({ count: 0, error: null }),
+
+        enquiryIds.length > 0
+          ? supabase.from(T.QUOTATIONS).select('*', { count: 'exact', head: true }).in('enquiry_id', enquiryIds).eq('status', 'APPROVED')
+          : Promise.resolve({ count: 0, error: null }),
+
+        enquiryIds.length > 0
+          ? supabase.from(T.FOLLOW_UPS).select('*', { count: 'exact', head: true }).in('enquiry_id', enquiryIds).eq('status', 'PENDING')
+          : Promise.resolve({ count: 0, error: null }),
+
+        enquiryIds.length > 0
+          ? supabase.from(T.FOLLOW_UPS).select('*', { count: 'exact', head: true }).in('enquiry_id', enquiryIds).eq('status', 'COMPLETED')
+          : Promise.resolve({ count: 0, error: null }),
       ]);
 
-      // Recent high-priority enquiries needing attention
+      // ── Recent high-priority items ─────────────────────────────────────────
       const { data: recentHighPriority } = await supabase
         .from(T.ENQUIRIES)
         .select('id, customer_name, ai_summary, status, priority, created_at')
         .eq('user_id', userId)
         .eq('priority', 'HIGH')
-        .in('status', ['NEW', 'REVIEW'])
+        .in('status', ['NEW', 'REVIEW', 'PENDING_APPROVAL'])
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -77,25 +90,36 @@ export const DashboardController = {
       const approvedQuotations = approvedQuotationsRes.count ?? 0;
       const pendingFollowUps = pendingFollowUpsRes.count ?? 0;
       const completedFollowUps = completedFollowUpsRes.count ?? 0;
+      const totalEnquiries = totalRes.count ?? 0;
+      const highPriority = highRes.count ?? 0;
+      const pendingApprovals = pendingApprovalsRes.count ?? 0;
 
       sendSuccess(res, {
+        // ── Flat keys the frontend Dashboard KPI cards read ──────────────────
+        totalEnquiries,
+        highPriority,
+        pendingApprovals,
+        followupsDue: pendingFollowUps,
+
+        // ── Detailed breakdown ───────────────────────────────────────────────
         enquiries: {
-          total: totalRes.count ?? 0,
+          total: totalEnquiries,
           byStatus: {
             new: newRes.count ?? 0,
             analyzing: analyzingRes.count ?? 0,
             review: reviewRes.count ?? 0,
+            pendingApproval: pendingApprovalRes.count ?? 0,
             approved: approvedRes.count ?? 0,
             completed: completedRes.count ?? 0,
           },
           byPriority: {
-            high: highRes.count ?? 0,
+            high: highPriority,
             medium: mediumRes.count ?? 0,
             low: lowRes.count ?? 0,
           },
         },
         approvals: {
-          pending: pendingApprovalsRes.count ?? 0,
+          pending: pendingApprovals,
         },
         quotations: {
           total: totalQuotations,
