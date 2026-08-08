@@ -13,6 +13,49 @@ const T = {
   APPROVALS: 'approvals',
 } as const;
 
+// ─── Shape enquiry row → frontend-compatible object ───────────────────────────
+//
+// Frontend expects:
+//   enquiry.id, .content, .customer, .sourceType, .status, .priority
+//   .createdAt, .updatedAt
+//   .analysis  = { requirements, budget, timeline, priority, missingQuestions,
+//                  summary, intent, recommendation }
+//   .generatedResponse
+//   .generatedQuotation  (from quotations relation or flat string)
+//   .quotations[], .followUps[], .approvals[]
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function shapeEnquiry(row: Record<string, any>) {
+  const base = rowToCamel(row);
+
+  // Build the nested analysis object that the frontend AnalysisCard expects
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const analysis: Record<string, any> | null =
+    (row.ai_summary || row.requirements || row.missing_questions || row.budget || row.timeline)
+      ? {
+          requirements: row.requirements ?? [],
+          budget: row.budget ? `${row.currency || 'INR'} ${row.budget}` : undefined,
+          timeline: row.timeline ?? undefined,
+          priority: row.priority ?? 'MEDIUM',
+          missingQuestions: Array.isArray(row.missing_questions) ? row.missing_questions : [],
+          summary: row.ai_summary ?? undefined,
+          intent: row.intent ?? undefined,
+          recommendation: row.recommendation ?? undefined,
+        }
+      : null;
+
+  return {
+    ...base,
+    // Aliases the frontend reads
+    content: row.raw_content,               // frontend reads enquiry.content
+    customer: row.customer_name ?? '',      // frontend reads enquiry.customer
+    // Structured analysis object
+    analysis,
+    // Generated content aliases (camelCase already done by rowToCamel)
+    generatedResponse: row.generated_response ?? null,
+  };
+}
+
 // ─── Context builder for AI calls ─────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,6 +87,7 @@ export const EnquiryService = {
         user_id: userId,
         raw_content: input.content,
         source_type: input.sourceType ?? 'TEXT',
+        customer_name: input.customer || null,   // store optional customer name
         status: 'NEW',
         priority: 'MEDIUM',
       })
@@ -51,7 +95,8 @@ export const EnquiryService = {
       .single();
 
     assertNoDbError(error, 'Enquiry create');
-    return rowToCamel(data as Record<string, unknown>);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return shapeEnquiry(data as Record<string, any>);
   },
 
   // ── List ──────────────────────────────────────────────────────────────────
@@ -87,7 +132,8 @@ export const EnquiryService = {
 
     const total = count ?? 0;
     return {
-      enquiries: rowsToCamel(data as Record<string, unknown>[]),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      enquiries: (data as Record<string, any>[]).map(shapeEnquiry),
       pagination: {
         total,
         page,
@@ -118,7 +164,7 @@ export const EnquiryService = {
     const row = data as Record<string, any>;
     if (row.user_id !== userId) throw new ForbiddenError('You do not have access to this enquiry');
 
-    return rowToCamel(row);
+    return shapeEnquiry(row);
   },
 
   // ── Analyze ───────────────────────────────────────────────────────────────
@@ -127,7 +173,7 @@ export const EnquiryService = {
     // Ownership check
     const { data: existing, error: findError } = await supabase
       .from(T.ENQUIRIES)
-      .select('id, user_id, raw_content, status')
+      .select('id, user_id, raw_content, customer_name, status')
       .eq('id', id)
       .single();
 
@@ -151,14 +197,13 @@ export const EnquiryService = {
 
     // Validate priority
     if (!['LOW', 'MEDIUM', 'HIGH'].includes(analysis.priority)) {
-      await supabase.from(T.ENQUIRIES).update({ status: 'NEW' }).eq('id', id);
-      throw new AIError(`AI returned an invalid priority: "${analysis.priority}"`);
+      analysis.priority = 'MEDIUM'; // Normalise invalid values instead of crashing
     }
 
     const { data: updated, error: updateError } = await supabase
       .from(T.ENQUIRIES)
       .update({
-        customer_name: analysis.customerName,
+        customer_name: analysis.customerName || row.customer_name,
         customer_email: analysis.customerEmail,
         customer_phone: analysis.customerPhone,
         requirements: analysis.requirements,
@@ -176,7 +221,9 @@ export const EnquiryService = {
       .single();
 
     assertNoDbError(updateError, 'Enquiry update');
-    return { enquiry: rowToCamel(updated as Record<string, unknown>), analysis };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shaped = shapeEnquiry(updated as Record<string, any>);
+    return { enquiry: shaped, analysis: shaped.analysis };
   },
 
   // ── Generate Response ─────────────────────────────────────────────────────
@@ -200,10 +247,14 @@ export const EnquiryService = {
 
     await supabase
       .from(T.ENQUIRIES)
-      .update({ generated_response: result.response, updated_at: new Date().toISOString() })
+      .update({
+        generated_response: result.response,
+        status: 'PENDING_APPROVAL',
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id);
 
-    // Create approval record (idempotent — only if not already pending)
+    // Create approval record (idempotent)
     const { data: existingApproval } = await supabase
       .from(T.APPROVALS)
       .select('id')
@@ -265,6 +316,12 @@ export const EnquiryService = {
       .single();
 
     assertNoDbError(quotationError, 'Quotation create');
+
+    // Update enquiry status
+    await supabase
+      .from(T.ENQUIRIES)
+      .update({ status: 'PENDING_APPROVAL', updated_at: new Date().toISOString() })
+      .eq('id', id);
 
     // Create pending approval
     await supabase.from(T.APPROVALS).insert({

@@ -14,12 +14,13 @@ export const AuthService = {
       options: {
         data: {
           name: input.name,
+          fullName: input.name,
+          businessName: (input as Record<string, unknown>).businessName ?? '',
         },
       },
     });
 
     if (error) {
-      // Supabase returns "User already registered" if email exists
       if (
         error.message.toLowerCase().includes('already registered') ||
         error.message.toLowerCase().includes('already exists')
@@ -30,12 +31,13 @@ export const AuthService = {
     }
 
     if (!data.user || !data.session) {
-      // Supabase email confirmation is enabled — user needs to verify email
       return {
         user: {
           id: data.user?.id ?? '',
           email: input.email,
           name: input.name,
+          fullName: input.name,
+          businessName: (input as Record<string, unknown>).businessName ?? '',
         },
         token: null,
         message: 'Registration successful. Please check your email to confirm your account.',
@@ -43,11 +45,14 @@ export const AuthService = {
       };
     }
 
+    const meta = data.user.user_metadata ?? {};
     return {
       user: {
         id: data.user.id,
         email: data.user.email ?? input.email,
-        name: (data.user.user_metadata?.name as string) ?? input.name,
+        name: (meta.name as string) ?? input.name,
+        fullName: (meta.fullName as string) ?? input.name,
+        businessName: (meta.businessName as string) ?? '',
       },
       token: data.session.access_token,
       requiresEmailConfirmation: false,
@@ -63,7 +68,6 @@ export const AuthService = {
     });
 
     if (error) {
-      // Always return generic message to prevent user enumeration
       throw new AuthError('Invalid email or password');
     }
 
@@ -71,11 +75,14 @@ export const AuthService = {
       throw new AuthError('Login failed — no session returned');
     }
 
+    const meta = data.user.user_metadata ?? {};
     return {
       user: {
         id: data.user.id,
         email: data.user.email ?? input.email,
-        name: (data.user.user_metadata?.name as string) ?? '',
+        name: (meta.name as string) ?? '',
+        fullName: (meta.fullName as string) ?? (meta.name as string) ?? '',
+        businessName: (meta.businessName as string) ?? '',
       },
       token: data.session.access_token,
     };
@@ -88,10 +95,13 @@ export const AuthService = {
     if (error || !data.user) throw new AuthError('User account not found or session expired');
     if (data.user.id !== userId) throw new AuthError('Session mismatch');
 
+    const meta = data.user.user_metadata ?? {};
     return {
       id: data.user.id,
       email: data.user.email ?? '',
-      name: (data.user.user_metadata?.name as string) ?? '',
+      name: (meta.name as string) ?? '',
+      fullName: (meta.fullName as string) ?? (meta.name as string) ?? '',
+      businessName: (meta.businessName as string) ?? '',
     };
   },
 };

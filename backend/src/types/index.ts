@@ -16,6 +16,10 @@ export interface AuthRequest extends Request {
 
 // ─── API Response types ────────────────────────────────────────────────────────
 
+/**
+ * @deprecated The backend now returns data directly (no wrapper).
+ * Kept for backward-compat type references only.
+ */
 export interface ApiSuccess<T> {
   success: true;
   data: T;
@@ -23,6 +27,7 @@ export interface ApiSuccess<T> {
 
 export interface ApiErrorPayload {
   success: false;
+  message: string;
   error: {
     code: string;
     message: string;
