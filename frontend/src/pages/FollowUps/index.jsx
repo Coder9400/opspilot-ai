@@ -42,8 +42,18 @@ export default function FollowUps() {
     } finally { setUpdating(null); setConfirmId(null) }
   }
 
-  const pending = followups.filter((f) => (f.status || '').toUpperCase() !== 'COMPLETED')
-  const completed = followups.filter((f) => (f.status || '').toUpperCase() === 'COMPLETED')
+  const now = new Date()
+  const tasks = followups.map(fu => {
+    let displayStatus = (fu.status || 'PENDING').toUpperCase()
+    if (displayStatus !== 'COMPLETED' && fu.dueDate && new Date(fu.dueDate) < now) {
+      displayStatus = 'OVERDUE'
+    }
+    return { ...fu, displayStatus }
+  })
+
+  const pending = tasks.filter(f => f.displayStatus === 'PENDING' || f.displayStatus === 'IN_PROGRESS')
+  const overdue = tasks.filter(f => f.displayStatus === 'OVERDUE')
+  const completed = tasks.filter(f => f.displayStatus === 'COMPLETED')
 
   const initials = (name) => (name || '?').slice(0, 2).toUpperCase()
 
@@ -63,6 +73,10 @@ export default function FollowUps() {
         <div className="metric-card">
           <div className="metric-card-label">Pending Tasks</div>
           <div className="metric-card-value" style={{ color: 'var(--indigo-600)' }}>{pending.length}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-card-label">Overdue</div>
+          <div className="metric-card-value" style={{ color: 'var(--red-600)' }}>{overdue.length}</div>
         </div>
         <div className="metric-card">
           <div className="metric-card-label">Completed</div>
@@ -105,6 +119,42 @@ export default function FollowUps() {
                         <span className="followup-due">📅 Due: {fmtDate(fu.dueDate)}</span>
                         <PriorityBadge priority={fu.priority || 'medium'} />
                         <StatusBadge status="pending" />
+                      </div>
+                    </div>
+                    <button
+                      className="followup-done-btn"
+                      onClick={() => setConfirmId(fu.id)}
+                      disabled={updating === fu.id}
+                    >
+                      {updating === fu.id ? '…' : '✓ Complete'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Overdue */}
+          {overdue.length > 0 && (
+            <div>
+              <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: 'var(--red-600)', marginBottom: 'var(--sp-3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>⚠️</span> Overdue ({overdue.length})
+              </div>
+              <div className="followup-list">
+                {overdue.map((fu) => (
+                  <div key={fu.id} className="followup-item" style={{ borderLeft: '4px solid var(--red-500)' }}>
+                    <div className="followup-item-left">
+                      <div className="followup-title">{fu.task || fu.title || fu.description || 'Follow-up task'}</div>
+                      <div className="followup-desc" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-body)' }}>{fu.customer || fu.enquiry?.customerName || fu.enquiry?.customer || 'Customer'}</span>
+                        {fu.enquiryId && (
+                          <span style={{ cursor: 'pointer', color: 'var(--indigo-500)', fontWeight: 600 }} onClick={() => navigate(`/enquiries/${fu.enquiryId}`)}>· View Enquiry</span>
+                        )}
+                      </div>
+                      <div className="followup-meta">
+                        <span className="followup-due" style={{ color: 'var(--red-600)' }}>📅 Due: {fmtDate(fu.dueDate)}</span>
+                        <PriorityBadge priority={fu.priority || 'medium'} />
+                        <StatusBadge status="overdue" />
                       </div>
                     </div>
                     <button

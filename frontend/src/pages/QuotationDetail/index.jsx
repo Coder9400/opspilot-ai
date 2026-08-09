@@ -25,7 +25,7 @@ export default function QuotationDetail() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const data = await quotationService.getById(id)
+      const data = await quotationService.get(id)
       setQuotation(data?.quotation || data)
     } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
@@ -82,27 +82,63 @@ export default function QuotationDetail() {
             <tr>
               <th>Description</th>
               <th style={{ width: 100, textAlign: 'center' }}>Qty</th>
-              <th>Total</th>
+              <th style={{ width: 120, textAlign: 'right' }}>Unit Price</th>
+              <th style={{ width: 120, textAlign: 'right' }}>Total</th>
             </tr>
           </thead>
           <tbody>
-            {(quotation.items || []).map((item, i) => (
+            {(quotation.items || []).map((item, i) => {
+              const qty = item.quantity || 1;
+              const unitPrice = item.unitPrice || 0;
+              const itemTotal = qty * unitPrice;
+              const hasPrice = unitPrice > 0;
+              
+              return (
               <tr key={i}>
                 <td>
                   <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.description}</div>
                 </td>
-                <td style={{ textAlign: 'center' }}>{item.quantity || 1}</td>
-                <td>{fmtCurrency(item.total, quotation.currency || quotation.enquiry?.currency)}</td>
+                <td style={{ textAlign: 'center' }}>{qty}</td>
+                <td style={{ textAlign: 'right' }}>{hasPrice ? fmtCurrency(unitPrice, quotation.currency || quotation.enquiry?.currency) : <span className="text-muted" style={{fontSize: 'var(--fs-xs)'}}>TBD</span>}</td>
+                <td style={{ textAlign: 'right' }}>{hasPrice ? fmtCurrency(itemTotal, quotation.currency || quotation.enquiry?.currency) : <span className="text-muted" style={{fontSize: 'var(--fs-xs)'}}>TBD</span>}</td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
 
         <div className="quotation-totals">
-          <div className="quotation-grand-row">
-            <span className="quotation-grand-label">Grand Total</span>
-            <span className="quotation-grand-value">{fmtCurrency(quotation.totalAmount || quotation.amount, quotation.currency || quotation.enquiry?.currency)}</span>
-          </div>
+          {(() => {
+            const hasAnyPrice = (quotation.items || []).some(item => (item.unitPrice || 0) > 0);
+            const subtotal = (quotation.items || []).reduce((sum, item) => sum + ((item.quantity || 1) * (item.unitPrice || 0)), 0);
+            const taxRate = 0.18; // 18% GST standard
+            const tax = subtotal * taxRate;
+            const grandTotal = subtotal + tax;
+
+            if (!hasAnyPrice) {
+              return (
+                <div className="quotation-grand-row">
+                  <span className="quotation-grand-label">Total Estimate</span>
+                  <span className="quotation-grand-value" style={{ fontSize: 'var(--fs-md)', color: 'var(--amber-600)' }}>Pricing pending requirement review</span>
+                </div>
+              )
+            }
+            return (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--sp-2) var(--sp-4)', color: 'var(--text-body)' }}>
+                  <span>Subtotal</span>
+                  <span>{fmtCurrency(subtotal, quotation.currency || quotation.enquiry?.currency)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--sp-2) var(--sp-4)', color: 'var(--text-body)' }}>
+                  <span>GST (18%)</span>
+                  <span>{fmtCurrency(tax, quotation.currency || quotation.enquiry?.currency)}</span>
+                </div>
+                <div className="quotation-grand-row" style={{ marginTop: 'var(--sp-2)' }}>
+                  <span className="quotation-grand-label">Grand Total</span>
+                  <span className="quotation-grand-value">{fmtCurrency(grandTotal, quotation.currency || quotation.enquiry?.currency)}</span>
+                </div>
+              </>
+            )
+          })()}
         </div>
 
         {isPending && (

@@ -5,6 +5,7 @@ import { StatusBadge, PriorityBadge } from '../../components/Badge'
 import Button from '../../components/Button'
 import Loading from '../../components/Loading'
 import ErrorBanner from '../../components/ErrorBanner'
+import EmptyState from '../../components/EmptyState'
 import { enquiryService } from '../../services/enquiry.service'
 import { followupService } from '../../services/followup.service'
 import { getErrorMessage } from '../../utils/errorHandler'
@@ -61,6 +62,8 @@ export default function EnquiryDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
+  const [editingResponse, setEditingResponse] = useState(false)
+  const [draftResponse, setDraftResponse] = useState('')
 
   // 1. Fetch data
   const load = useCallback(async () => {
@@ -70,7 +73,8 @@ export default function EnquiryDetail() {
       const e = response.enquiry || response
       setEnq(e)
       setFollowups(e.followUps || [])
-      setQuotation(e.quotation || null)
+      setQuotation(e.quotations?.[0] || null)
+      if (e.generatedResponse && !draftResponse) setDraftResponse(e.generatedResponse)
     } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }, [id])
@@ -87,8 +91,30 @@ export default function EnquiryDetail() {
 
   const handleAnalyze   = () => runAI(enquiryService.analyze, 'Analyzing requirement…')
   const handleResponse  = () => runAI(enquiryService.generateResponse, 'Drafting response…')
-  const handleQuotation = () => runAI(enquiryService.generateQuotation, 'Preparing quotation…')
-  const handleFollowups = () => runAI(enquiryService.generateFollowups, 'Scheduling tasks…')
+
+  const handleQuotation = async () => {
+    if (quotation) {
+      navigate(`/quotations/${quotation.id}`)
+      return
+    }
+    setActionBusy('Preparing quotation…'); setError('')
+    try { 
+      const res = await enquiryService.generateQuotation(id)
+      if (res?.quotation?.id) navigate(`/quotations/${res.quotation.id}`)
+      else if (res?.id) navigate(`/quotations/${res.id}`)
+      else await load()
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setActionBusy(false) }
+  }
+
+  const handleFollowups = async () => {
+    setActionBusy('Scheduling tasks…'); setError('')
+    try { 
+      await enquiryService.generateFollowups(id)
+      navigate('/followups')
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setActionBusy(false) }
+  }
 
   const handleApprove = () => runAI(enquiryService.approve, 'Approving workflow…')
   const handleReject  = () => runAI(enquiryService.reject, 'Rejecting…')
@@ -118,7 +144,7 @@ export default function EnquiryDetail() {
   }
 
   const hasAnalysis = !!enq.aiSummary
-  const hasResponse = !!enq.suggestedResponse
+  const hasResponse = !!enq.generatedResponse
   const hasQuotation = !!quotation
   const hasTasks = followups.length > 0
   const needsApproval = enq.status === 'PENDING_APPROVAL'
@@ -269,11 +295,28 @@ export default function EnquiryDetail() {
                         <span style={{ fontSize: 'var(--fs-sm)' }}>Ready for review</span>
                       </div>
                       <div className="ai-response-actions">
-                        <button className="ai-response-action-btn">Copy</button>
+                        <button className="ai-response-action-btn" onClick={() => {
+                          if (editingResponse) {
+                            setEditingResponse(false)
+                          } else {
+                            setEditingResponse(true)
+                          }
+                        }}>{editingResponse ? 'Save Local Edit' : 'Edit'}</button>
+                        <button className="ai-response-action-btn" onClick={() => navigator.clipboard.writeText(draftResponse || enq.generatedResponse)}>Copy</button>
                         <button className="ai-response-action-btn" onClick={handleResponse}>Regenerate</button>
                       </div>
                     </div>
-                    <div className="ai-response-body">{enq.suggestedResponse}</div>
+                    <div className="ai-response-body">
+                      {editingResponse ? (
+                        <textarea
+                          style={{ width: '100%', minHeight: 200, padding: 12, border: '1px solid var(--border-input)', borderRadius: 'var(--r-md)', fontSize: 'var(--fs-sm)', fontFamily: 'inherit' }}
+                          value={draftResponse || enq.generatedResponse}
+                          onChange={(e) => setDraftResponse(e.target.value)}
+                        />
+                      ) : (
+                        <div style={{ whiteSpace: 'pre-wrap' }}>{draftResponse || enq.generatedResponse}</div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (

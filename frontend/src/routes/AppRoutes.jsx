@@ -11,6 +11,7 @@ import Dashboard from '../pages/Dashboard'
 import Enquiries from '../pages/Enquiries'
 import EnquiryNew from '../pages/EnquiryNew'
 import EnquiryDetail from '../pages/EnquiryDetail'
+import AIAnalysis from '../pages/AIAnalysis'
 import Quotations from '../pages/Quotations'
 import QuotationDetail from '../pages/QuotationDetail'
 import FollowUps from '../pages/FollowUps'
@@ -30,6 +31,7 @@ export default function AppRoutes() {
         <Route path="/enquiries" element={<ProtectedRoute><Enquiries /></ProtectedRoute>} />
         <Route path="/enquiries/new" element={<ProtectedRoute><EnquiryNew /></ProtectedRoute>} />
         <Route path="/enquiries/:id" element={<ProtectedRoute><EnquiryDetail /></ProtectedRoute>} />
+        <Route path="/ai-analysis" element={<ProtectedRoute><AIAnalysis /></ProtectedRoute>} />
         <Route path="/quotations" element={<ProtectedRoute><Quotations /></ProtectedRoute>} />
         <Route path="/quotations/:id" element={<ProtectedRoute><QuotationDetail /></ProtectedRoute>} />
         <Route path="/followups" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />

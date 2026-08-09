@@ -89,7 +89,7 @@ Return this exact JSON structure:
   "customerEmail": string or null,
   "customerPhone": string or null,
   "requirements": [array of strings],
-  "budget": number or null (numeric value only, no currency symbols),
+  "budget": number or null (Extract the exact numeric value provided in the text. Do not multiply or convert currencies. If the text says 1300$, budget is 1300),
   "currency": "INR" (default) or detected currency code,
   "timeline": string or null (human-readable, e.g. "2 weeks", "3 months"),
   "priority": "LOW" | "MEDIUM" | "HIGH",
@@ -174,7 +174,8 @@ Return this exact JSON structure:
 }
 
 Rules:
-- Use realistic Indian market pricing (INR)
+- If prices or budgets are not specified in the enquiry, DO NOT invent them. Set unitPrice to 0 and add "Price not available" in the notes.
+- Use the exact budget or pricing mentioned in the enquiry without currency conversion.
 - GST is typically 18% on software/IT services
 - Break down into meaningful line items (3-6 items)
 - total = subtotal + tax
@@ -221,11 +222,12 @@ Return this exact JSON structure:
 }
 
 Rules:
+- Generate follow-ups ONLY for actual missing requirements or specific workflow states (e.g. if customer info is missing, task: "Request missing customer details").
+- Do not generate generic tasks if they don't apply.
 - HIGH priority: first task due in 0-2 hours (use daysFromNow: 0), then 1-2 days
 - MEDIUM priority: first task due in 1-2 days
 - LOW priority: first task due in 3-5 days
-- Tasks should be specific and actionable
-- Include tasks like: confirm requirements, send quotation, follow up on decision`;
+- Tasks should be specific and actionable`;
 
     const userContent = `Enquiry context:
 Customer: ${context.customerName || 'Unknown'}
