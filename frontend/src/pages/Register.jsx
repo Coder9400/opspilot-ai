@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Input from '../components/Input'
 import Button from '../components/Button'
-import { authService } from '../services/auth.service'
+import { useAuth } from '../hooks/useAuth'
 import { getErrorMessage } from '../utils/errorHandler'
 
 const AUTH_FEATURES = [
@@ -28,6 +28,14 @@ function validate(fields) {
 
 export default function Register() {
   const navigate = useNavigate()
+  const { register, isAuthenticated } = useAuth()
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [isAuthenticated, navigate])
+
   const [fields, setFields] = useState({ fullName: '', businessName: '', email: '', password: '', confirmPassword: '' })
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
@@ -48,13 +56,14 @@ export default function Register() {
     setFormError('')
 
     try {
-      await authService.register({
+      await register({
         fullName: fields.fullName,
+        name: fields.fullName,
         businessName: fields.businessName,
         email: fields.email,
         password: fields.password,
       })
-      navigate('/login', { state: { registered: true } })
+      navigate('/dashboard', { replace: true })
     } catch (err) {
       setFormError(getErrorMessage(err))
     } finally {
@@ -68,7 +77,7 @@ export default function Register() {
       <div className="auth-left">
         <div className="auth-left-content">
           <div className="auth-left-logo">
-            <div className="logo-icon">O</div>
+            <div className="logo-icon">OP</div>
             <div className="logo-text">OPSPILOT AI</div>
           </div>
           <h2 className="auth-left-heading">Start automating your workflow today</h2>

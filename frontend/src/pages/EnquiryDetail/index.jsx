@@ -1,55 +1,42 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import Sidebar from '../../components/Sidebar'
+import AppShell from '../../components/AppShell'
+import { StatusBadge, PriorityBadge } from '../../components/Badge'
 import Button from '../../components/Button'
-import { PriorityBadge, StatusBadge } from '../../components/Badge'
 import Loading from '../../components/Loading'
 import ErrorBanner from '../../components/ErrorBanner'
-import Modal from '../../components/Modal'
+import EmptyState from '../../components/EmptyState'
 import { enquiryService } from '../../services/enquiry.service'
+import { followupService } from '../../services/followup.service'
 import { getErrorMessage } from '../../utils/errorHandler'
 
-const fmtDate = (d) => d ? new Date(d).toLocaleString('en-GB') : '—'
+/* ── Workflow Bar ────────────────────────────────────────── */
+const WF_STEPS = [
+  { id: 'new', label: 'Received' },
+  { id: 'analyzing', label: 'Analyzed' },
+  { id: 'review', label: 'Drafted' },
+  { id: 'pending_approval', label: 'Approval' },
+  { id: 'approved', label: 'Approved' },
+]
 
-/* ── Workflow status steps ──────────────────────────────────── */
-const STATUS_STEPS = ['NEW', 'ANALYZING', 'REVIEW', 'PENDING_APPROVAL', 'APPROVED', 'COMPLETED']
+function WorkflowBar({ currentStatus }) {
+  const s = (currentStatus || 'new').toLowerCase()
+  const idx = WF_STEPS.findIndex((step) => step.id === s) || 0
+  const activeIdx = s === 'completed' ? WF_STEPS.length : (idx === -1 ? 0 : idx)
 
-function WorkflowStatus({ status }) {
-  const normalized = (status || 'NEW').toUpperCase().replace(/ /g, '_')
-  const currentIdx = STATUS_STEPS.indexOf(normalized)
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto', paddingBottom: 4 }}>
-      {STATUS_STEPS.map((step, i) => {
-        const isDone = i < currentIdx
-        const isCurrent = i === currentIdx
+    <div className="workflow-bar">
+      {WF_STEPS.map((step, i) => {
+        const isDone = i < activeIdx || s === 'completed'
+        const isActive = i === activeIdx && s !== 'completed'
         return (
-          <div key={step} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-            }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: '50%',
-                background: isDone ? 'var(--color-success)' : isCurrent ? 'var(--color-primary)' : 'var(--color-border)',
-                color: isDone || isCurrent ? '#fff' : 'var(--color-text-muted)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontWeight: 700, fontSize: 12,
-              }}>
-                {isDone ? '✓' : i + 1}
-              </div>
-              <span style={{
-                fontSize: 10, fontWeight: isCurrent ? 700 : 500,
-                color: isCurrent ? 'var(--color-primary)' : isDone ? 'var(--color-success)' : 'var(--color-text-muted)',
-                whiteSpace: 'nowrap',
-              }}>
-                {step.replace(/_/g, ' ')}
-              </span>
+          <div key={step.id} style={{ display: 'flex', alignItems: 'center', flex: i < WF_STEPS.length - 1 ? '1 1 auto' : '0 0 auto' }}>
+            <div className={`wf-step ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}`}>
+              <div className="wf-step-circle" aria-hidden="true">{isDone ? '✓' : i + 1}</div>
+              <div className="wf-step-label">{step.label}</div>
             </div>
-            {i < STATUS_STEPS.length - 1 && (
-              <div style={{
-                height: 2, width: 40, flexShrink: 0,
-                background: i < currentIdx ? 'var(--color-success)' : 'var(--color-border)',
-                margin: '0 4px', marginBottom: 20,
-              }} />
+            {i < WF_STEPS.length - 1 && (
+              <div className={`wf-connector ${isDone ? 'done' : ''}`} />
             )}
           </div>
         )
@@ -58,524 +45,409 @@ function WorkflowStatus({ status }) {
   )
 }
 
-/* ── AI Analysis card ───────────────────────────────────────── */
-function AnalysisCard({ analysis }) {
-  if (!analysis) return null
-  const {
-    requirements, budget, timeline, priority, missingQuestions,
-    intent, recommendation, summary,
-  } = analysis
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-      {summary && (
-        <div className="card" style={{ background: 'var(--color-primary-soft)', border: '1px solid var(--color-primary-light)' }}>
-          <div style={{ fontWeight: 700, color: 'var(--color-primary-dark)', marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span>🤖</span> AI Summary
-          </div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)', lineHeight: 1.7 }}>{summary}</p>
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-4)' }}>
-        {priority && (
-          <div className="card">
-            <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-text-muted)', marginBottom: 8 }}>Priority</div>
-            <PriorityBadge priority={priority.toLowerCase()} />
-          </div>
-        )}
-        {budget && (
-          <div className="card">
-            <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-text-muted)', marginBottom: 8 }}>Budget</div>
-            <div style={{ fontWeight: 600 }}>{budget}</div>
-          </div>
-        )}
-        {timeline && (
-          <div className="card">
-            <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-text-muted)', marginBottom: 8 }}>Timeline</div>
-            <div style={{ fontWeight: 600 }}>{timeline}</div>
-          </div>
-        )}
-        {intent && (
-          <div className="card">
-            <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-text-muted)', marginBottom: 8 }}>Intent</div>
-            <div style={{ fontWeight: 600 }}>{intent}</div>
-          </div>
-        )}
-      </div>
-
-      {requirements && requirements.length > 0 && (
-        <div className="card">
-          <div style={{ fontWeight: 700, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span>📋</span> Extracted Requirements
-          </div>
-          <ul style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {(Array.isArray(requirements) ? requirements : Object.entries(requirements)).map((req, i) => (
-              <li key={i} style={{
-                display: 'flex', gap: 10, alignItems: 'flex-start',
-                fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)',
-              }}>
-                <span style={{
-                  width: 20, height: 20, borderRadius: '50%', background: 'var(--color-primary-light)',
-                  color: 'var(--color-primary)', fontWeight: 700, fontSize: 11,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1,
-                }}>{i + 1}</span>
-                {typeof req === 'string' ? req : `${req[0]}: ${req[1]}`}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {missingQuestions && missingQuestions.length > 0 && (
-        <div className="card" style={{ border: '1px solid var(--color-warning-light)' }}>
-          <div style={{ fontWeight: 700, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', color: '#92400e' }}>
-            <span>⚠️</span> Missing Information
-          </div>
-          <ul style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {missingQuestions.map((q, i) => (
-              <li key={i} style={{
-                display: 'flex', gap: 10, alignItems: 'flex-start',
-                fontSize: 'var(--font-size-sm)', color: '#92400e',
-              }}>
-                <span>?</span>{q}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {recommendation && (
-        <div className="card">
-          <div style={{ fontWeight: 700, marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span>💡</span> AI Recommendation
-          </div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.7 }}>{recommendation}</p>
-        </div>
-      )}
-    </div>
-  )
+/* ── Formatter ───────────────────────────────────────────── */
+const fmtCurrency = (v, cur = 'USD') => {
+  if (v == null) return '—'
+  try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(v) } catch { return `${cur} ${v}` }
 }
 
-/* ── Draft text card (response/quotation) ───────────────────── */
-function DraftCard({ title, icon, content, onRegenerate, loading }) {
-  const [editing, setEditing] = useState(false)
-  const [localVal, setLocalVal] = useState(content || '')
-
-  useEffect(() => { setLocalVal(content || '') }, [content])
-
-  if (!content && !loading) return null
-
-  return (
-    <div className="card" style={{ border: '1px solid var(--color-primary-light)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontWeight: 700, display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span>{icon}</span> {title}
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span className="badge badge-warning" style={{ fontSize: 10 }}>AI DRAFT</span>
-          <button className="enq-action-btn" onClick={() => setEditing((v) => !v)}>
-            {editing ? 'Done' : 'Edit'}
-          </button>
-          <button className="enq-action-btn" onClick={onRegenerate} disabled={loading}>
-            {loading ? '…' : '↻ Regenerate'}
-          </button>
-        </div>
-      </div>
-      {loading ? <Loading text="Generating…" /> : editing ? (
-        <textarea
-          className="input-field"
-          rows={8}
-          value={localVal}
-          onChange={(e) => setLocalVal(e.target.value)}
-          style={{ resize: 'vertical', lineHeight: 1.7, fontFamily: 'inherit' }}
-        />
-      ) : (
-        <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-          {localVal}
-        </div>
-      )}
-      <div style={{
-        marginTop: 12, padding: '8px 12px',
-        background: '#fef3c7', borderRadius: 'var(--radius-sm)',
-        fontSize: 'var(--font-size-xs)', color: '#92400e',
-      }}>
-        ⚠️ This is an <strong>AI-generated draft</strong>. Nothing will be sent externally without your explicit approval.
-      </div>
-    </div>
-  )
-}
-
-/* ── Approval Section ───────────────────────────────────────── */
-function ApprovalSection({ enquiryId, approval, onApproved }) {
-  const [comments, setComments] = useState('')
-  const [approveModal, setApproveModal] = useState(false)
-  const [rejectModal, setRejectModal] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const handleApprove = async () => {
-    setLoading(true); setError('')
-    try {
-      await enquiryService.approve(enquiryId, {
-        actionType: 'SEND_QUOTATION',
-        comments: comments || 'Approved',
-      })
-      setApproveModal(false)
-      onApproved && onApproved()
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally { setLoading(false) }
-  }
-
-  const handleReject = async () => {
-    setLoading(true); setError('')
-    try {
-      await enquiryService.reject(enquiryId, { comments: comments || 'Rejected' })
-      setRejectModal(false)
-      onApproved && onApproved()
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally { setLoading(false) }
-  }
-
-  const approvalStatus = approval?.status?.toUpperCase() || 'PENDING'
-
-  return (
-    <div>
-      {/* HUMAN APPROVAL BANNER */}
-      <div style={{
-        background: approvalStatus === 'APPROVED' ? 'var(--color-success-light)' :
-          approvalStatus === 'REJECTED' ? 'var(--color-danger-light)' : '#fef3c7',
-        border: `1px solid ${approvalStatus === 'APPROVED' ? '#6ee7b7' :
-          approvalStatus === 'REJECTED' ? '#fca5a5' : '#fcd34d'}`,
-        borderRadius: 'var(--radius-lg)',
-        padding: 'var(--space-5)',
-        marginBottom: 'var(--space-4)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-          <span style={{ fontSize: '1.5rem' }}>
-            {approvalStatus === 'APPROVED' ? '✅' : approvalStatus === 'REJECTED' ? '❌' : '⏳'}
-          </span>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 'var(--font-size-lg)', color:
-              approvalStatus === 'APPROVED' ? '#065f46' :
-              approvalStatus === 'REJECTED' ? '#991b1b' : '#92400e',
-            }}>
-              {approvalStatus === 'APPROVED' ? 'Approved' :
-               approvalStatus === 'REJECTED' ? 'Rejected' : 'Human Approval Required'}
-            </div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: '#92400e', marginTop: 2 }}>
-              {approvalStatus === 'PENDING'
-                ? 'AI has prepared recommendations. Review and approve or reject before any external action is taken.'
-                : approval?.comments || ''}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {error && <ErrorBanner message={error} style={{ marginBottom: 12 }} />}
-
-      {approvalStatus === 'PENDING' && (
-        <div className="card">
-          <div style={{ fontWeight: 700, marginBottom: 12 }}>Your Decision</div>
-          <div className="input-group" style={{ marginBottom: 16 }}>
-            <label className="input-label" htmlFor="approval-comments">Comments (optional)</label>
-            <textarea
-              id="approval-comments"
-              className="input-field"
-              rows={3}
-              placeholder="Add any notes or context for this approval decision..."
-              value={comments}
-              onChange={(e) => setComments(e.target.value)}
-              style={{ resize: 'vertical' }}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <Button variant="primary" onClick={() => setApproveModal(true)}>✓ Approve</Button>
-            <Button variant="danger" onClick={() => setRejectModal(true)}>✕ Reject</Button>
-          </div>
-        </div>
-      )}
-
-      {/* Approve confirmation modal */}
-      <Modal
-        open={approveModal}
-        onClose={() => setApproveModal(false)}
-        title="Confirm Approval"
-        confirmLabel="Yes, Approve"
-        confirmVariant="primary"
-        onConfirm={handleApprove}
-        loading={loading}
-      >
-        <p>Are you sure you want to <strong>approve</strong> this AI-generated recommendation?</p>
-        <p style={{ marginTop: 8, color: 'var(--color-text-muted)' }}>
-          This will mark the action as approved. No external messages will be sent automatically — your team will coordinate next steps.
-        </p>
-        {comments && <p style={{ marginTop: 8, fontStyle: 'italic', fontSize: 'var(--font-size-sm)' }}>Comments: "{comments}"</p>}
-      </Modal>
-
-      {/* Reject confirmation modal */}
-      <Modal
-        open={rejectModal}
-        onClose={() => setRejectModal(false)}
-        title="Confirm Rejection"
-        confirmLabel="Yes, Reject"
-        confirmVariant="danger"
-        onConfirm={handleReject}
-        loading={loading}
-      >
-        <p>Are you sure you want to <strong>reject</strong> this AI-generated recommendation?</p>
-        <p style={{ marginTop: 8, color: 'var(--color-text-muted)' }}>
-          You can regenerate the AI response or quotation after rejecting.
-        </p>
-        {comments && <p style={{ marginTop: 8, fontStyle: 'italic', fontSize: 'var(--font-size-sm)' }}>Comments: "{comments}"</p>}
-      </Modal>
-    </div>
-  )
-}
-
-/* ── Main EnquiryDetail page ─────────────────────────────────── */
 export default function EnquiryDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const [enquiry, setEnquiry] = useState(null)
-  const [approval, setApproval] = useState(null)
+  const [enq, setEnq] = useState(null)
+  const [followups, setFollowups] = useState([])
+  const [quotation, setQuotation] = useState(null)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+  const [editingResponse, setEditingResponse] = useState(false)
+  const [draftResponse, setDraftResponse] = useState('')
 
-  // AI action loading states
-  const [analyzing, setAnalyzing] = useState(false)
-  const [genResponse, setGenResponse] = useState(false)
-  const [genQuotation, setGenQuotation] = useState(false)
-  const [genFollowups, setGenFollowups] = useState(false)
-  const [actionError, setActionError] = useState('')
-
+  // 1. Fetch data
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const [enqData, approvalData] = await Promise.allSettled([
-        enquiryService.get(id),
-        enquiryService.getApproval(id),
-      ])
-      if (enqData.status === 'fulfilled') setEnquiry(enqData.value?.enquiry || enqData.value)
-      if (approvalData.status === 'fulfilled') setApproval(approvalData.value?.approval || approvalData.value)
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally { setLoading(false) }
+      const response = await enquiryService.get(id)
+      const e = response.enquiry || response
+      setEnq(e)
+      setFollowups(e.followUps || [])
+      setQuotation(e.quotations?.[0] || null)
+      if (e.generatedResponse && !draftResponse) setDraftResponse(e.generatedResponse)
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setLoading(false) }
   }, [id])
 
   useEffect(() => { load() }, [load])
 
-  const runAction = async (label, setter, fn) => {
-    setter(true); setActionError('')
-    try {
-      await fn()
-      await load() // Refresh enquiry after action
-    } catch (err) {
-      setActionError(`${label} failed: ${getErrorMessage(err)}`)
-    } finally { setter(false) }
+  // 2. AI Actions
+  const runAI = async (actionFn, loadingMsg) => {
+    setActionBusy(loadingMsg); setError('')
+    try { await actionFn(id); await load() }
+    catch (err) { setError(getErrorMessage(err)) }
+    finally { setActionBusy(false) }
   }
 
-  if (loading) return (
-    <div className="dashboard-layout">
-      <div className={sidebarOpen ? 'sidebar open' : 'sidebar'}><Sidebar onClose={() => setSidebarOpen(false)} /></div>
-      <main className="dashboard-main">
-        <header className="dashboard-header">
-          <div className="dashboard-header-left">
-            <button className="mobile-menu-btn" onClick={() => setSidebarOpen((v) => !v)}>☰</button>
-            <div className="dashboard-header-title">Enquiry Details</div>
-          </div>
-        </header>
-        <div className="dashboard-content"><Loading text="Loading enquiry…" /></div>
-      </main>
-    </div>
-  )
+  const handleAnalyze   = () => runAI(enquiryService.analyze, 'Analyzing requirement…')
+  const handleResponse  = () => runAI(enquiryService.generateResponse, 'Drafting response…')
 
-  if (error) return (
-    <div className="dashboard-layout">
-      <div className={sidebarOpen ? 'sidebar open' : 'sidebar'}><Sidebar onClose={() => setSidebarOpen(false)} /></div>
-      <main className="dashboard-main">
-        <header className="dashboard-header">
-          <div className="dashboard-header-left">
-            <button className="mobile-menu-btn" onClick={() => setSidebarOpen((v) => !v)}>☰</button>
-            <div className="dashboard-header-title">Enquiry Details</div>
-          </div>
-        </header>
-        <div className="dashboard-content"><ErrorBanner message={error} onRetry={load} /></div>
-      </main>
-    </div>
-  )
+  const handleQuotation = async () => {
+    if (quotation) {
+      navigate(`/quotations/${quotation.id}`)
+      return
+    }
+    setActionBusy('Preparing quotation…'); setError('')
+    try { 
+      const res = await enquiryService.generateQuotation(id)
+      if (res?.quotation?.id) navigate(`/quotations/${res.quotation.id}`)
+      else if (res?.id) navigate(`/quotations/${res.id}`)
+      else await load()
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setActionBusy(false) }
+  }
 
-  const status = (enquiry?.status || 'NEW').toUpperCase()
-  const analysis = enquiry?.analysis || enquiry?.aiAnalysis
-  const generatedResponse = enquiry?.generatedResponse || enquiry?.aiResponse
-  const generatedQuotation = enquiry?.generatedQuotation || enquiry?.quotation?.content || enquiry?.quotation?.description
+  const handleFollowups = async () => {
+    setActionBusy('Scheduling tasks…'); setError('')
+    try { 
+      await enquiryService.generateFollowups(id)
+      navigate('/followups')
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setActionBusy(false) }
+  }
+
+  const handleApprove = () => runAI(enquiryService.approve, 'Approving workflow…')
+  const handleReject  = () => runAI(enquiryService.reject, 'Rejecting…')
+
+  const toggleFollowup = async (fuId, currentStatus) => {
+    const next = currentStatus === 'PENDING' ? 'COMPLETED' : 'PENDING'
+    try {
+      setFollowups(prev => prev.map(f => f.id === fuId ? { ...f, status: next } : f))
+      await followupService.update(fuId, { status: next })
+    } catch (err) { setError('Failed to update follow-up task.'); await load() }
+  }
+
+  if (loading) {
+    return (
+      <AppShell>
+        <div style={{ marginTop: '20vh' }}><Loading text="Loading enquiry workspace…" /></div>
+      </AppShell>
+    )
+  }
+  if (!enq) {
+    return (
+      <AppShell>
+        <ErrorBanner message={error || 'Enquiry not found.'} />
+        <Button variant="ghost" onClick={() => navigate('/enquiries')}>← Back</Button>
+      </AppShell>
+    )
+  }
+
+  const hasAnalysis = !!enq.aiSummary
+  const hasResponse = !!enq.generatedResponse
+  const hasQuotation = !!quotation
+  const hasTasks = followups.length > 0
+  const needsApproval = enq.status === 'PENDING_APPROVAL'
 
   return (
-    <div className="dashboard-layout">
-      <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} aria-hidden="true" />
-      <div className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
-        <Sidebar onClose={() => setSidebarOpen(false)} />
+    <AppShell>
+      {/* ── Header & Pipeline ── */}
+      <div className="page-header" style={{ marginBottom: 'var(--sp-5)' }}>
+        <div className="page-header-left">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/enquiries')} style={{ marginBottom: 8, marginLeft: -8 }}>← Back to Enquiries</Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <h1 className="page-title" style={{ margin: 0 }}>{enq.customerName || 'New Enquiry'}</h1>
+            <StatusBadge status={enq.status} />
+          </div>
+          <p className="page-subtitle">{enq.customerEmail || 'No email provided'}</p>
+        </div>
+        <div className="page-header-right" style={{ minWidth: 300 }}>
+          <WorkflowBar currentStatus={enq.status} />
+        </div>
       </div>
-      <main className="dashboard-main">
-        <header className="dashboard-header">
-          <div className="dashboard-header-left">
-            <button className="mobile-menu-btn" aria-label="Open navigation" onClick={() => setSidebarOpen((v) => !v)}>☰</button>
-            <div>
-              <div className="dashboard-header-title">Enquiry #{id.slice(0, 8)}</div>
-              <div className="dashboard-header-sub">{enquiry?.customer || 'Customer Enquiry'}</div>
-            </div>
-          </div>
-          <div className="dashboard-header-right">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/enquiries')}>← Back</Button>
-            <Button variant="ghost" size="sm" onClick={load}>↻ Refresh</Button>
-          </div>
-        </header>
 
-        <div className="dashboard-content" style={{ maxWidth: 900, margin: '0 auto' }}>
-          {/* Workflow Progress */}
-          <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-            <div style={{ fontWeight: 700, marginBottom: 16 }}>Workflow Progress</div>
-            <WorkflowStatus status={status} />
-          </div>
+      {error && <ErrorBanner message={error} onRetry={load} style={{ marginBottom: 20 }} />}
+      {actionBusy && (
+        <div className="card" style={{ marginBottom: 20, textAlign: 'center', background: 'var(--indigo-50)', borderColor: 'var(--indigo-100)' }}>
+          <Loading inline size="sm" text={actionBusy} />
+        </div>
+      )}
 
-          {/* Action error */}
-          {actionError && <ErrorBanner message={actionError} style={{ marginBottom: 16 }} />}
-
-          {/* Enquiry content */}
-          <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 'var(--font-size-lg)' }}>Customer Enquiry</div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <PriorityBadge priority={(enquiry?.priority || 'MEDIUM').toLowerCase()} />
-                <StatusBadge status={status.toLowerCase().replace(/ /g, '_')} />
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginBottom: 16, fontSize: 'var(--font-size-sm)' }}>
-              <div><span style={{ color: 'var(--color-text-muted)' }}>Customer:</span> <strong>{enquiry?.customer || '—'}</strong></div>
-              <div><span style={{ color: 'var(--color-text-muted)' }}>Created:</span> {fmtDate(enquiry?.createdAt)}</div>
-              <div><span style={{ color: 'var(--color-text-muted)' }}>Source:</span> {enquiry?.sourceType || 'TEXT'}</div>
-              <div><span style={{ color: 'var(--color-text-muted)' }}>Updated:</span> {fmtDate(enquiry?.updatedAt)}</div>
-            </div>
+      {/* ── Two-Column Workspace ── */}
+      <div className="workspace">
+        
+        {/* LEFT: Raw Enquiry */}
+        <div className="workspace-left">
+          <div className="card">
+            <div className="card-section-title">Original Input</div>
             <div style={{
-              background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)', padding: 'var(--space-4)',
-              fontSize: 'var(--font-size-sm)', lineHeight: 1.8, whiteSpace: 'pre-wrap',
-              color: 'var(--color-text)',
+              background: 'var(--bg-subtle)',
+              border: '1px solid var(--border-card)',
+              borderRadius: 'var(--r-md)',
+              padding: 'var(--sp-4)',
+              fontSize: 'var(--fs-sm)',
+              color: 'var(--text-body)',
+              whiteSpace: 'pre-wrap',
+              maxHeight: '600px',
+              overflowY: 'auto'
             }}>
-              {enquiry?.content || 'No content available.'}
+              {enq.rawContent || 'No content provided.'}
             </div>
+          </div>
+        </div>
 
-            {/* Analyze button */}
-            {(status === 'NEW' || status === 'REVIEW') && (
-              <div style={{ marginTop: 16 }}>
-                <Button
-                  variant="primary"
-                  loading={analyzing}
-                  disabled={analyzing}
-                  onClick={() => runAction('Analysis', setAnalyzing, () => enquiryService.analyze(id))}
-                >
-                  {analyzing ? 'AI is analyzing…' : '🔍 Analyze with AI'}
+        {/* RIGHT: AI Analysis & Generation */}
+        <div className="workspace-right">
+
+          {/* 1. Extraction (Analysis) */}
+          <div className="ai-section">
+            <div className="ai-section-header">
+              <div className="ai-section-title">
+                <div className="ai-section-icon">🧠</div> AI Extraction
+              </div>
+              {!hasAnalysis && (
+                <Button variant="primary" size="sm" onClick={handleAnalyze} disabled={!!actionBusy}>
+                  Analyze Requirement
                 </Button>
-                {status === 'REVIEW' && <span style={{ marginLeft: 12, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>Re-analyze to refresh results</span>}
+              )}
+            </div>
+            {hasAnalysis ? (
+              <div className="ai-section-body">
+                <div className="extraction-grid" style={{ marginBottom: 'var(--sp-4)' }}>
+                  <div className="extraction-item">
+                    <div className="extraction-label">Customer Profile</div>
+                    <div className="extraction-value large">{enq.customerName || <span className="extraction-value muted">Unknown</span>}</div>
+                    <div className="extraction-value muted" style={{ fontSize: 'var(--fs-xs)', marginTop: 2 }}>{enq.customerEmail}</div>
+                  </div>
+                  <div className="extraction-item">
+                    <div className="extraction-label">Budget & Timeline</div>
+                    <div className="extraction-value large" style={{ color: 'var(--green-600)' }}>
+                      {fmtCurrency(enq.budget, enq.currency)}
+                    </div>
+                    <div className="extraction-value muted" style={{ fontSize: 'var(--fs-xs)', marginTop: 2 }}>
+                      {enq.timeline || 'No timeline specified'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="extraction-grid">
+                  <div className="extraction-item">
+                    <div className="extraction-label">Priority Classification</div>
+                    <PriorityBadge priority={enq.priority} style={{ marginTop: 4 }} />
+                  </div>
+                  <div className="extraction-item" style={{ gridColumn: '1 / -1' }}>
+                    <div className="extraction-label">Extracted Requirements</div>
+                    {enq.requirements?.length > 0 ? (
+                      <div className="req-list">
+                        {enq.requirements.map((req, i) => (
+                          <div key={i} className="req-item">
+                            <div className="req-num">{i + 1}</div>
+                            <span>{req}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="extraction-value muted">No specific requirements detected.</div>
+                    )}
+                  </div>
+                </div>
+
+                {enq.missingInformation?.length > 0 && (
+                  <div className="extraction-item" style={{ marginTop: 'var(--sp-3)', background: 'var(--amber-50)', borderColor: 'var(--amber-100)' }}>
+                    <div className="extraction-label" style={{ color: 'var(--amber-600)' }}>Missing Information</div>
+                    <div className="missing-list">
+                      {enq.missingInformation.map((q, i) => (
+                        <div key={i} className="missing-item">
+                          <span style={{ flexShrink: 0, marginTop: 1 }}>•</span>
+                          <span>{q}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="ai-section-body">
+                <EmptyState icon="⚙️" title="Awaiting Analysis" description="Click Analyze to let AI extract requirements, budget, and priority from the raw input." />
               </div>
             )}
           </div>
 
-          {/* AI Analysis Results */}
-          {analyzing && (
-            <div className="card" style={{ marginBottom: 'var(--space-4)', textAlign: 'center' }}>
-              <Loading text="AI is analyzing this enquiry…" />
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 8 }}>
-                Extracting requirements, detecting missing information, and classifying priority…
-              </p>
-            </div>
-          )}
-
-          {analysis && !analyzing && (
-            <div style={{ marginBottom: 'var(--space-4)' }}>
-              <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 'var(--font-size-base)' }}>🤖 AI Analysis Results</div>
-              <AnalysisCard analysis={analysis} />
-            </div>
-          )}
-
-          {/* AI Response Generation */}
-          {(analysis || status !== 'NEW') && (
-            <div style={{ marginBottom: 'var(--space-4)' }}>
-              {!generatedResponse && !genResponse && (
-                <Button
-                  variant="outline"
-                  loading={genResponse}
-                  disabled={genResponse}
-                  onClick={() => runAction('Response generation', setGenResponse, () => enquiryService.generateResponse(id))}
-                  style={{ marginBottom: 12 }}
-                >
-                  ✍️ Generate AI Response
-                </Button>
-              )}
-              <DraftCard
-                title="AI-Generated Response"
-                icon="✍️"
-                content={generatedResponse}
-                loading={genResponse}
-                onRegenerate={() => runAction('Response regeneration', setGenResponse, () => enquiryService.generateResponse(id))}
-              />
-            </div>
-          )}
-
-          {/* AI Quotation Generation */}
-          {(analysis || status !== 'NEW') && (
-            <div style={{ marginBottom: 'var(--space-4)' }}>
-              {!generatedQuotation && !genQuotation && (
-                <Button
-                  variant="outline"
-                  loading={genQuotation}
-                  disabled={genQuotation}
-                  onClick={() => runAction('Quotation generation', setGenQuotation, () => enquiryService.generateQuotation(id))}
-                  style={{ marginBottom: 12 }}
-                >
-                  📄 Generate Quotation
-                </Button>
-              )}
-              <DraftCard
-                title="AI-Generated Quotation"
-                icon="📄"
-                content={generatedQuotation}
-                loading={genQuotation}
-                onRegenerate={() => runAction('Quotation regeneration', setGenQuotation, () => enquiryService.generateQuotation(id))}
-              />
-            </div>
-          )}
-
-          {/* Follow-ups generation */}
-          {(generatedResponse || generatedQuotation) && (
-            <div style={{ marginBottom: 'var(--space-4)' }}>
-              <Button
-                variant="ghost"
-                size="sm"
-                loading={genFollowups}
-                disabled={genFollowups}
-                onClick={() => runAction('Follow-up generation', setGenFollowups, () => enquiryService.generateFollowups(id))}
-              >
-                🔔 {genFollowups ? 'Generating follow-ups…' : 'Generate Follow-up Tasks'}
-              </Button>
-            </div>
-          )}
-
-          {/* HUMAN APPROVAL SECTION */}
-          {(generatedResponse || generatedQuotation || status === 'PENDING_APPROVAL') && (
-            <div style={{ marginBottom: 'var(--space-4)' }}>
-              <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 'var(--font-size-base)' }}>
-                ✅ Human Approval
+          {/* 2. Suggested Response */}
+          {hasAnalysis && (
+            <div className="ai-section">
+              <div className="ai-section-header">
+                <div className="ai-section-title">
+                  <div className="ai-section-icon">💬</div> Suggested Customer Response
+                </div>
+                {!hasResponse && (
+                  <Button variant="outline" size="sm" onClick={handleResponse} disabled={!!actionBusy}>
+                    Draft Response
+                  </Button>
+                )}
               </div>
-              <ApprovalSection enquiryId={id} approval={approval} onApproved={load} />
+              {hasResponse ? (
+                <div className="ai-section-body" style={{ padding: 0 }}>
+                  <div className="ai-response-card" style={{ border: 'none', borderRadius: 0, boxShadow: 'none' }}>
+                    <div className="ai-response-header">
+                      <div className="ai-response-title">
+                        <span className="badge badge-ai-draft">AI DRAFT</span>
+                        <span style={{ fontSize: 'var(--fs-sm)' }}>Ready for review</span>
+                      </div>
+                      <div className="ai-response-actions">
+                        <button className="ai-response-action-btn" onClick={() => {
+                          if (editingResponse) {
+                            setEditingResponse(false)
+                          } else {
+                            setEditingResponse(true)
+                          }
+                        }}>{editingResponse ? 'Save Local Edit' : 'Edit'}</button>
+                        <button className="ai-response-action-btn" onClick={() => navigator.clipboard.writeText(draftResponse || enq.generatedResponse)}>Copy</button>
+                        <button className="ai-response-action-btn" onClick={handleResponse}>Regenerate</button>
+                      </div>
+                    </div>
+                    <div className="ai-response-body">
+                      {editingResponse ? (
+                        <textarea
+                          style={{ width: '100%', minHeight: 200, padding: 12, border: '1px solid var(--border-input)', borderRadius: 'var(--r-md)', fontSize: 'var(--fs-sm)', fontFamily: 'inherit' }}
+                          value={draftResponse || enq.generatedResponse}
+                          onChange={(e) => setDraftResponse(e.target.value)}
+                        />
+                      ) : (
+                        <div style={{ whiteSpace: 'pre-wrap' }}>{draftResponse || enq.generatedResponse}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="ai-section-body">
+                  <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>Generate a professional response asking for missing requirements and outlining next steps.</p>
+                </div>
+              )}
             </div>
           )}
+
+          {/* 3. Quotation */}
+          {hasAnalysis && (
+            <div className="ai-section">
+              <div className="ai-section-header">
+                <div className="ai-section-title">
+                  <div className="ai-section-icon">📄</div> Quotation / Proposal
+                </div>
+                {!hasQuotation && (
+                  <Button variant="outline" size="sm" onClick={handleQuotation} disabled={!!actionBusy}>
+                    Create Quotation
+                  </Button>
+                )}
+              </div>
+              {hasQuotation ? (
+                <div className="ai-section-body">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Proposal Summary</div>
+                    <StatusBadge status={quotation.status || 'draft'} />
+                  </div>
+                  <table className="quotation-table">
+                    <thead><tr><th>Item / Service</th><th>Amount</th></tr></thead>
+                    <tbody>
+                      {(quotation.items || []).map((item, i) => (
+                        <tr key={i}>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{item.description}</div>
+                            {item.quantity > 1 && <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>Qty: {item.quantity}</div>}
+                          </td>
+                          <td>{fmtCurrency(item.total, enq.currency)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="quotation-totals">
+                    <div className="quotation-grand-row">
+                      <span className="quotation-grand-label">Total Estimate</span>
+                      <span className="quotation-grand-value">{fmtCurrency(quotation.totalAmount, enq.currency)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="ai-section-body">
+                  <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>Automatically build a preliminary quotation based on the extracted budget and requirements.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 4. Follow-up Tasks */}
+          {hasAnalysis && (
+            <div className="ai-section">
+              <div className="ai-section-header">
+                <div className="ai-section-title">
+                  <div className="ai-section-icon">🔔</div> Follow-up Tasks
+                </div>
+                {!hasTasks && (
+                  <Button variant="outline" size="sm" onClick={handleFollowups} disabled={!!actionBusy}>
+                    Schedule Tasks
+                  </Button>
+                )}
+              </div>
+              {hasTasks ? (
+                <div className="ai-section-body">
+                  <div className="followup-list">
+                    {followups.map(fu => {
+                      const done = fu.status === 'COMPLETED'
+                      return (
+                        <div key={fu.id} className={`followup-item ${done ? 'done' : ''}`}>
+                          <div className="followup-item-left">
+                            <div className={`followup-title ${done ? 'done' : ''}`}>{fu.title || fu.task}</div>
+                            <div className="followup-meta">
+                              <span className="followup-due">📅 {fu.dueDate ? new Date(fu.dueDate).toLocaleDateString() : 'No date'}</span>
+                              <PriorityBadge priority={fu.priority} style={{ padding: '0 6px', fontSize: 9 }} />
+                            </div>
+                          </div>
+                          <button className="followup-done-btn" onClick={() => toggleFollowup(fu.id, fu.status)}>
+                            {done ? 'Undo' : 'Complete'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="ai-section-body">
+                  <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>Generate action items to ensure this enquiry progresses.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 5. HUMAN APPROVAL GATE */}
+          {needsApproval && (
+            <div className="approval-card" style={{ marginTop: 'var(--sp-4)' }}>
+              <div className="approval-card-header">
+                <div className="approval-card-icon pending">✋</div>
+                <div>
+                  <div className="approval-card-title">Human Approval Required</div>
+                  <div className="approval-card-subtitle">Review the AI-generated workflow before taking action.</div>
+                </div>
+              </div>
+              <div className="approval-card-body">
+                <div className="approval-pending-items">
+                  {hasResponse && <div className="approval-pending-item"><span>📧</span> <strong>Response:</strong> Ready to send to customer</div>}
+                  {hasQuotation && <div className="approval-pending-item"><span>📄</span> <strong>Quotation:</strong> {fmtCurrency(quotation?.totalAmount, enq.currency)} proposal generated</div>}
+                  {hasTasks && <div className="approval-pending-item"><span>🔔</span> <strong>Tasks:</strong> {followups.length} follow-ups scheduled</div>}
+                </div>
+                <div className="approval-actions">
+                  <button className="approval-action-reject" onClick={handleReject} disabled={!!actionBusy}>
+                    Reject & Rework
+                  </button>
+                  <button className="approval-action-approve" onClick={handleApprove} disabled={!!actionBusy}>
+                    Approve Workflow
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   )
 }

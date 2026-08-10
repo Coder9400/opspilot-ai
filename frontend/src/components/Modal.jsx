@@ -1,19 +1,19 @@
-import { useEffect } from 'react'
 import Button from './Button'
 
 /**
- * Modal – reusable confirmation/action modal.
+ * Modal — centered, premium overlay dialog.
  *
  * Props:
- *   open: bool
+ *   open: boolean
  *   onClose: () => void
  *   title: string
- *   children: node
- *   confirmLabel: string (default 'Confirm')
- *   confirmVariant: button variant (default 'primary')
+ *   children: ReactNode — body content
+ *   confirmLabel: string (default: 'Confirm')
+ *   cancelLabel: string (default: 'Cancel')
+ *   confirmVariant: button variant (default: 'primary')
  *   onConfirm: () => void
- *   loading: bool
- *   cancelLabel: string (default 'Cancel')
+ *   loading: boolean
+ *   hideFooter: boolean — hide default footer buttons
  */
 export default function Modal({
   open,
@@ -21,70 +21,36 @@ export default function Modal({
   title,
   children,
   confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
   confirmVariant = 'primary',
   onConfirm,
   loading = false,
-  cancelLabel = 'Cancel',
+  hideFooter = false,
 }) {
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-
   if (!open) return null
 
+  const handleBackdrop = (e) => {
+    if (e.target === e.currentTarget) onClose()
+  }
+
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.5)',
-        zIndex: 500,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 20,
-      }}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-title"
-    >
-      <div
-        className="card"
-        style={{ width: '100%', maxWidth: 480, position: 'relative' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h2 id="modal-title" style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700 }}>
-            {title}
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1 }}
-          >
-            ✕
-          </button>
+    <div className="modal-backdrop" onClick={handleBackdrop} role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div className="modal">
+        <div className="modal-header">
+          <h2 className="modal-title" id="modal-title">{title}</h2>
+          <button className="modal-close" onClick={onClose} aria-label="Close dialog">✕</button>
         </div>
-
-        {/* Body */}
-        <div style={{ marginBottom: 24, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.7 }}>
-          {children}
-        </div>
-
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <Button variant="ghost" onClick={onClose} disabled={loading}>
-            {cancelLabel}
-          </Button>
-          {onConfirm && (
-            <Button variant={confirmVariant} onClick={onConfirm} loading={loading} disabled={loading}>
-              {confirmLabel}
-            </Button>
-          )}
-        </div>
+        <div className="modal-body">{children}</div>
+        {!hideFooter && (
+          <div className="modal-footer">
+            <Button variant="ghost" onClick={onClose} disabled={loading}>{cancelLabel}</Button>
+            {onConfirm && (
+              <Button variant={confirmVariant} onClick={onConfirm} loading={loading} disabled={loading}>
+                {confirmLabel}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

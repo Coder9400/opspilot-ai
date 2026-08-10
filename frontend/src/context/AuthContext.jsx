@@ -55,13 +55,34 @@ export function AuthProvider({ children }) {
     return userData
   }, [])
 
+  const register = useCallback(async (payload) => {
+    const data = await authService.register(payload)
+    const { token: jwt, user: userData } = data
+    if (jwt) {
+      authService.setToken(jwt)
+      setToken(jwt)
+      setUser(userData)
+    }
+    return data
+  }, [])
+
   const logout = useCallback(() => {
     authService.clearToken()
     setToken(null)
     setUser(null)
   }, [])
 
-  const value = { user, token, loading, login, logout, isAuthenticated: !!user }
+  const value = {
+    user,
+    token,
+    loading,
+    login,
+    register,
+    signin: login,
+    signup: register,
+    logout,
+    isAuthenticated: !!user,
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

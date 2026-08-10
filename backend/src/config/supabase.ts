@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import ws from 'ws';
 import { env } from './env';
 
 // ─── Supabase Client ──────────────────────────────────────────────────────────
@@ -10,6 +11,9 @@ export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
     autoRefreshToken: false,
     persistSession: false,
     detectSessionInUrl: false,
+  },
+  realtime: {
+    transport: ws as any,
   },
 });
 

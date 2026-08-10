@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 const NAV_ITEMS = [
   { id: 'dashboard',           label: 'Dashboard',           icon: '⬛', href: '/dashboard' },
   { id: 'enquiries',           label: 'Enquiries',           icon: '📋', href: '/enquiries' },
+  { id: 'ai-analysis',         label: 'AI Analysis',         icon: '🧠', href: '/ai-analysis' },
   { id: 'quotations',          label: 'My Quotations',       icon: '📄', href: '/quotations' },
   { id: 'received-quotations', label: 'Received Quotations', icon: '📥', href: '/received-quotations' },
   { id: 'followups',           label: 'Follow-ups',          icon: '🔔', href: '/followups' },
@@ -45,6 +46,7 @@ export default function Sidebar({ onClose }) {
   const activePath = location.pathname
   const getActiveId = () => {
     if (activePath.startsWith('/enquiries')) return 'enquiries'
+    if (activePath.startsWith('/ai-analysis')) return 'ai-analysis'
     if (activePath.startsWith('/quotations')) return 'quotations'
     if (activePath.startsWith('/received-quotations')) return 'received-quotations'
     if (activePath.startsWith('/followups')) return 'followups'
@@ -61,7 +63,7 @@ export default function Sidebar({ onClose }) {
     <aside className="sidebar" id="sidebar">
       {/* Logo */}
       <div className="sidebar-logo">
-        <div className="logo-icon">O</div>
+        <div className="logo-icon">OP</div>
         <div className="logo-text">
           OPSPILOT AI
           <small>Workflow Autopilot</small>

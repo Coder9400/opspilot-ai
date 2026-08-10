@@ -6,7 +6,7 @@
  * Handles 401 by clearing the token (callers redirect to /login).
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 function getToken() {
   return localStorage.getItem('opspilot_token')
@@ -37,8 +37,15 @@ async function parseResponse(res) {
     throw err
   }
 
+  // Backend uses sendSuccess(res, payload) which wraps in { success: true, data: payload }
+  // Unwrap the data envelope so service callers receive the payload directly
+  if (body && typeof body === 'object' && 'data' in body) {
+    return body.data
+  }
+
   return body
 }
+
 
 /**
  * Core request function.
