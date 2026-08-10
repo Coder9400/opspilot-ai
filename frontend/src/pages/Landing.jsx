@@ -2,194 +2,205 @@ import { Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 
-/* ── Feature cards data ─────────────────────────────────────── */
-const FEATURES = [
-  {
-    icon: '🔍',
-    title: 'AI Requirement Extraction',
-    desc: 'Automatically parse and extract key requirements from raw customer enquiries. No more manually reading through long emails.',
-  },
-  {
-    icon: '🚨',
-    title: 'Missing Information Detection',
-    desc: 'AI identifies gaps in the enquiry — budget, timeline, specifications — and flags what to ask before you respond.',
-  },
-  {
-    icon: '📊',
-    title: 'Priority Classification',
-    desc: 'Instantly classify enquiries as High, Medium, or Low priority based on context, urgency signals, and business value.',
-  },
-  {
-    icon: '✍️',
-    title: 'AI Response & Quotation',
-    desc: 'Generate professional responses and detailed quotations in seconds. Tailored to each enquiry, ready for your review.',
-  },
-  {
-    icon: '🔔',
-    title: 'Follow-up Tracking',
-    desc: 'Never lose track of a lead again. Automated follow-up reminders ensure no enquiry falls through the cracks.',
-  },
-  {
-    icon: '✅',
-    title: 'Human Approval Gate',
-    desc: 'Every AI action requires your explicit approval before anything is sent. You stay in control, always.',
-  },
+const WORKFLOW_STRIP = [
+  { name: 'ENQUIRY', type: 'ai' },
+  { name: 'AI ANALYSIS', type: 'ai' },
+  { name: 'RESPONSE', type: 'ai' },
+  { name: 'QUOTATION', type: 'ai' },
+  { name: 'FOLLOW-UP', type: 'ai' },
+  { name: 'APPROVAL', type: 'human' },
+]
+
+const VALUE_POINTS = [
+  { title: 'AI-assisted workflow', desc: 'Automated extraction & response prep' },
+  { title: 'Human-in-the-loop approval', desc: 'No action sent without review' },
+  { title: 'Faster response preparation', desc: 'Reduce turn-around time by hours' },
+  { title: 'Centralized customer enquiries', desc: 'All leads in one workspace' },
 ]
 
 const STEPS = [
   {
-    n: 1,
-    title: 'Capture Enquiry',
-    desc: 'Paste or submit a customer enquiry into OPSPILOT AI from email, web form, or any channel.',
+    num: '01',
+    title: 'Capture',
+    desc: 'Bring in customer enquiries from text, email-style content, or documents.',
   },
   {
-    n: 2,
-    title: 'AI Analyses',
-    desc: 'The AI extracts requirements, flags missing info, classifies priority, and prepares a response.',
+    num: '02',
+    title: 'Understand',
+    desc: 'AI extracts customer details, requirements, budget, timeline, priority, and missing questions.',
   },
   {
-    n: 3,
-    title: 'Review Recommendations',
-    desc: 'You see the AI\'s analysis, suggested response, and quotation — all in one clear view.',
+    num: '03',
+    title: 'Prepare',
+    desc: 'Generate a suggested response and a basic quotation or proposal.',
   },
   {
-    n: 4,
-    title: 'Approve & Act',
-    desc: 'With one click you approve. Nothing is sent without your sign-off. The AI handles the rest.',
+    num: '04',
+    title: 'Follow Up',
+    desc: 'Create follow-up tasks and track their status.',
+  },
+  {
+    num: '05',
+    title: 'Approve',
+    desc: 'Humans review and approve important external actions.',
   },
 ]
 
-const HITL_CHECKS = [
+const FEATURES = [
   {
-    icon: '🤖',
-    iconClass: '',
-    title: 'AI prepares recommendations',
-    desc: 'Responses, quotations, follow-up plans — all AI-generated.',
+    icon: '🔍',
+    title: 'AI Enquiry Analysis',
+    desc: 'Extract customer requirements, budget, timeline, priority, and missing information.',
   },
   {
-    icon: '👀',
-    iconClass: '',
-    title: 'You review everything',
-    desc: 'See exactly what the AI intends to do before anything happens.',
+    icon: '✍️',
+    title: 'AI Response Generation',
+    desc: 'Create suggested customer responses that your team can review and refine.',
+  },
+  {
+    icon: '📄',
+    title: 'Smart Quotations',
+    desc: 'Generate structured quotations and proposals from enquiry information.',
+  },
+  {
+    icon: '🔔',
+    title: 'Follow-up Automation',
+    desc: 'Turn customer requirements into trackable follow-up tasks.',
   },
   {
     icon: '✅',
-    iconClass: 'success',
-    title: 'You approve or edit',
-    desc: 'Approve with one click, or edit freely. Your word is final.',
+    title: 'Human Approval',
+    desc: 'Keep humans in control before important external actions.',
   },
   {
-    icon: '🚀',
-    iconClass: 'success',
-    title: 'Action is taken',
-    desc: 'Only after your approval does OPSPILOT AI act on your behalf.',
+    icon: '📊',
+    title: 'Centralized Workflow',
+    desc: 'Track enquiries, quotations, approvals, and follow-ups from one workspace.',
   },
 ]
 
-/* ── Dashboard preview data ─────────────────────────────────── */
-const PREVIEW_ROWS = [
-  { name: 'Meridian Retail', subject: 'ERP Integration', priority: 'high', status: 'pending' },
-  { name: 'BlueSky Logistics', subject: 'WMS Platform', priority: 'high', status: 'new' },
-  { name: 'Sunridge Café', subject: 'POS Software', priority: 'medium', status: 'new' },
-  { name: 'NextGen Architects', subject: 'Project Mgmt', priority: 'medium', status: 'approved' },
+const USE_CASES = [
+  {
+    title: 'Sales Teams',
+    desc: 'Turn inbound enquiries into structured sales workflows.',
+  },
+  {
+    title: 'Service Businesses',
+    desc: 'Understand customer requirements and prepare responses faster.',
+  },
+  {
+    title: 'Agencies',
+    desc: 'Convert project enquiries into proposals, quotations, and follow-ups.',
+  },
+  {
+    title: 'Small Businesses',
+    desc: 'Automate repetitive workflow preparation without losing human oversight.',
+  },
+]
+
+const TRUST_POINTS = [
+  {
+    title: 'Human approval',
+    desc: 'Important external actions remain under human control.',
+  },
+  {
+    title: 'Structured workflows',
+    desc: 'Every enquiry moves through a clear workflow.',
+  },
+  {
+    title: 'Safe AI assistance',
+    desc: 'AI prepares recommendations rather than silently taking important actions.',
+  },
 ]
 
 export default function Landing() {
   return (
-    <div className="landing-page">
+    <div className="landing-root">
       <Navbar />
 
-      {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="hero-section">
-        <div className="container">
-          <div className="hero-badge">
-            <span className="dot" />
-            AI-Powered Workflow Automation
+      {/* ── 1. HERO SECTION ── */}
+      <section className="hero-section" id="product">
+        <div className="lp-container hero-grid">
+          {/* Left Content */}
+          <div className="hero-left">
+            <div className="lp-badge">
+              <span className="dot" /> AI-POWERED BUSINESS WORKFLOW
+            </div>
+
+            <h1 className="hero-title">
+              Turn customer enquiries into <span className="highlight-purple">intelligent workflows</span>.
+            </h1>
+
+            <p className="hero-subtitle">
+              OPSPILOT AI helps businesses analyze customer enquiries, extract requirements, generate responses and quotations, create follow-ups, and keep humans in control.
+            </p>
+
+            <div className="hero-actions">
+              <Link to="/register" className="btn btn-primary btn-lg">
+                Get Started
+              </Link>
+              <a href="#how-it-works" className="btn btn-outline btn-lg">
+                See How It Works
+              </a>
+            </div>
+
+            <div className="hero-subtext">
+              🔒 Built for modern business teams
+            </div>
           </div>
 
-          <h1 className="hero-title">
-            Turn Customer Enquiries Into{' '}
-            <span className="highlight">Actionable Workflows</span>
-          </h1>
-
-          <p className="hero-subtitle">
-            OPSPILOT AI helps small businesses process customer enquiries, extract requirements,
-            generate professional responses and quotations, and track follow-ups — with human
-            oversight at every step.
-          </p>
-
-          <div className="hero-actions">
-            <Link to="/register" className="btn btn-primary btn-lg">
-              Get Started — It's Free
-            </Link>
-            <a href="#how-it-works" className="btn btn-outline btn-lg">
-              See How It Works
-            </a>
-          </div>
-
-          {/* Dashboard preview mockup */}
-          <div className="dashboard-preview">
-            <div className="dashboard-preview-frame">
-              {/* Browser chrome */}
-              <div className="preview-topbar">
-                <div className="preview-dot" />
-                <div className="preview-dot" />
-                <div className="preview-dot" />
-                <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--color-text-muted)' }}>
-                  app.opspilot.ai/dashboard
-                </span>
+          {/* Right Product Visualization Card */}
+          <div className="hero-right">
+            <div className="workspace-mockup-card">
+              <div className="mockup-header">
+                <span className="mockup-dot red" />
+                <span className="mockup-dot yellow" />
+                <span className="mockup-dot green" />
+                <span className="mockup-title">OPSPILOT AI Workspace</span>
               </div>
-              {/* App body */}
-              <div className="preview-body">
-                {/* Sidebar */}
-                <div className="preview-sidebar">
-                  <div className="preview-sidebar-logo">
-                    <span style={{ background: '#6366f1', borderRadius: 4, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: '#fff', flexShrink: 0 }}>O</span>
-                    OPSPILOT
-                  </div>
-                  {['Dashboard', 'Enquiries', 'Quotations', 'Follow-ups', 'Settings'].map((item, i) => (
-                    <div key={item} className={`preview-sidebar-item${i === 0 ? ' active' : ''}`}>
-                      {['⬛', '📋', '📄', '🔔', '⚙️'][i]} {item}
-                    </div>
-                  ))}
-                </div>
-                {/* Main content */}
-                <div className="preview-content">
-                  {/* KPI row */}
-                  <div className="preview-kpi-row">
-                    {[
-                      { label: 'Total Enquiries', value: '148' },
-                      { label: 'High Priority', value: '12' },
-                      { label: 'Pending Approval', value: '5' },
-                      { label: 'Follow-ups Due', value: '8' },
-                    ].map((kpi) => (
-                      <div key={kpi.label} className="preview-kpi">
-                        <div className="preview-kpi-label">{kpi.label}</div>
-                        <div className="preview-kpi-value">{kpi.value}</div>
-                      </div>
-                    ))}
-                  </div>
 
-                  {/* Enquiries table */}
-                  <div className="preview-table">
-                    <div className="preview-table-header">
-                      <span>Company</span>
-                      <span>Priority</span>
-                      <span>Status</span>
-                      <span>Score</span>
-                    </div>
-                    {PREVIEW_ROWS.map((row) => (
-                      <div key={row.name} className="preview-table-row">
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 10, color: '#0f172a' }}>{row.name}</div>
-                          <div style={{ fontSize: 9, color: '#94a3b8' }}>{row.subject}</div>
-                        </div>
-                        <span><span className={`preview-pill ${row.priority}`}>{row.priority}</span></span>
-                        <span><span className={`preview-pill ${row.status}`}>{row.status}</span></span>
-                        <span style={{ fontWeight: 700, color: '#6366f1', fontSize: 10 }}>94%</span>
-                      </div>
-                    ))}
+              <div className="mockup-body">
+                {/* Customer Enquiry Card */}
+                <div className="mockup-item">
+                  <div className="mockup-item-header">
+                    <strong>Customer Enquiry</strong>
+                    <span className="badge badge-high">High Priority</span>
                   </div>
+                  <div className="mockup-item-content">
+                    <p className="cust-name">Rahul Sharma</p>
+                    <p className="cust-req">Restaurant website with online ordering</p>
+                    <div className="cust-meta">
+                      <span>Budget: <strong>₹60,000</strong></span>
+                      <span>Timeline: <strong>6 weeks</strong></span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI Processing Status */}
+                <div className="mockup-item ai-card">
+                  <div className="mockup-item-header">
+                    <span className="ai-tag">✨ AI Processing Complete</span>
+                  </div>
+                  <ul className="ai-check-list">
+                    <li>✓ Requirements extracted</li>
+                    <li>✓ Missing questions identified</li>
+                    <li>✓ Priority classified</li>
+                  </ul>
+                </div>
+
+                {/* Output items & Approval Gate */}
+                <div className="mockup-actions-grid">
+                  <div className="output-chip">✉️ AI Response Ready</div>
+                  <div className="output-chip">📄 Quotation Drafted</div>
+                  <div className="output-chip">🔔 2 Follow-ups Created</div>
+                </div>
+
+                <div className="approval-gate-card">
+                  <div className="approval-gate-header">
+                    <span>⚠️ Human Approval</span>
+                    <span className="status-badge-review">Review Required</span>
+                  </div>
+                  <p className="approval-text">Approval required before sending response and proposal to customer.</p>
                 </div>
               </div>
             </div>
@@ -197,155 +208,220 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Features ─────────────────────────────────────────── */}
-      <section className="features-section" id="features">
-        <div className="container">
-          <div className="text-center">
-            <div className="section-label">Features</div>
-            <h2 className="section-title" style={{ marginTop: 8, marginBottom: 16 }}>
-              Everything you need to handle enquiries
-            </h2>
-            <p className="section-subtitle" style={{ margin: '0 auto' }}>
-              From first contact to closed deal, OPSPILOT AI automates the workflow while keeping
-              you in the driver's seat.
-            </p>
-          </div>
-          <div className="features-grid">
-            {FEATURES.map((f) => (
-              <div key={f.title} className="feature-card">
-                <div className="feature-icon">{f.icon}</div>
-                <div className="feature-title">{f.title}</div>
-                <p className="feature-desc">{f.desc}</p>
+      {/* ── 2. HERO WORKFLOW STRIP ── */}
+      <section className="workflow-strip-section" id="workflow">
+        <div className="lp-container">
+          <div className="strip-container">
+            {WORKFLOW_STRIP.map((item, idx) => (
+              <div key={item.name} className="strip-item-wrap">
+                <div className={`strip-pill ${item.type}`}>
+                  {item.name}
+                </div>
+                {idx < WORKFLOW_STRIP.length - 1 && (
+                  <span className="strip-arrow">→</span>
+                )}
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── How It Works ─────────────────────────────────────── */}
-      <section className="how-section" id="how-it-works">
-        <div className="container">
-          <div className="text-center">
-            <div className="section-label">How it works</div>
-            <h2 className="section-title" style={{ marginTop: 8, marginBottom: 16 }}>
-              From enquiry to action in minutes
-            </h2>
-            <p className="section-subtitle" style={{ margin: '0 auto' }}>
-              A simple 4-step process that transforms every customer enquiry into a structured,
-              AI-powered workflow.
-            </p>
+      {/* ── 3. TRUST / VALUE STRIP ── */}
+      <section className="value-strip-section">
+        <div className="lp-container">
+          <h3 className="value-strip-heading">
+            One workflow. Less manual work. More customer conversations handled.
+          </h3>
+
+          <div className="value-grid">
+            {VALUE_POINTS.map((pt) => (
+              <div key={pt.title} className="value-card">
+                <span className="value-icon">⚡</span>
+                <h4>{pt.title}</h4>
+                <p>{pt.desc}</p>
+              </div>
+            ))}
           </div>
-          <div className="steps-grid">
+        </div>
+      </section>
+
+      {/* ── 4. HOW IT WORKS ── */}
+      <section className="how-it-works-section" id="how-it-works">
+        <div className="lp-container">
+          <div className="section-header-center">
+            <span className="section-eyebrow">HOW IT WORKS</span>
+            <h2>From enquiry to action — in one workflow.</h2>
+            <p>OPSPILOT AI turns unstructured customer requests into structured, reviewable business actions.</p>
+          </div>
+
+          <div className="steps-container">
             {STEPS.map((step) => (
-              <div key={step.n} className="step-card">
-                <div className="step-number">{step.n}</div>
-                <div className="step-title">{step.title}</div>
-                <p className="step-desc">{step.desc}</p>
+              <div key={step.num} className="step-card">
+                <span className="step-num">{step.num}</span>
+                <h3>{step.title}</h3>
+                <p>{step.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Human in the Loop ────────────────────────────────── */}
-      <section className="hitl-section" id="human-approval">
-        <div className="container">
-          <div className="hitl-inner">
-            {/* Left: visual */}
-            <div className="hitl-visual">
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 20,
-                  paddingBottom: 16,
-                  borderBottom: '1px solid var(--color-border)',
-                }}
-              >
-                <span
-                  style={{
-                    background: 'var(--color-primary)',
-                    color: '#fff',
-                    borderRadius: 6,
-                    width: 32,
-                    height: 32,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 800,
-                  }}
-                >
-                  O
-                </span>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>Pending Your Approval</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                    5 actions awaiting review
-                  </div>
-                </div>
+      {/* ── 5. CORE FEATURES ── */}
+      <section className="features-section" id="features">
+        <div className="lp-container">
+          <div className="section-header-center">
+            <span className="section-eyebrow">FEATURES</span>
+            <h2>Everything your team needs to move enquiries forward.</h2>
+          </div>
+
+          <div className="features-grid">
+            {FEATURES.map((feat) => (
+              <div key={feat.title} className="feature-card">
+                <div className="feature-icon">{feat.icon}</div>
+                <h3>{feat.title}</h3>
+                <p>{feat.desc}</p>
               </div>
-              {HITL_CHECKS.map((item) => (
-                <div key={item.title} className="hitl-check-item">
-                  <div className={`hitl-check-icon ${item.iconClass}`}>{item.icon}</div>
-                  <div>
-                    <div className="hitl-check-title">{item.title}</div>
-                    <div className="hitl-check-desc">{item.desc}</div>
-                  </div>
-                </div>
-              ))}
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 6. AI WORKSPACE PREVIEW (Dark Section) ── */}
+      <section className="workspace-preview-section">
+        <div className="lp-container">
+          <div className="section-header-center light-text">
+            <span className="section-eyebrow purple">AI WORKSPACE</span>
+            <h2>Your AI workflow, visible at every step.</h2>
+          </div>
+
+          <div className="dark-preview-frame">
+            <div className="dark-preview-sidebar">
+              <div className="preview-brand">OPSPILOT AI</div>
+              <div className="preview-nav-item active">Overview</div>
+              <div className="preview-nav-item">Enquiries</div>
+              <div className="preview-nav-item">Quotations</div>
+              <div className="preview-nav-item">Follow-ups</div>
+              <div className="preview-nav-item">Approvals</div>
             </div>
 
-            {/* Right: copy */}
-            <div>
-              <div className="section-label">Human-in-the-Loop</div>
-              <h2 className="section-title" style={{ marginTop: 8 }}>
-                AI does the heavy lifting.
-                <br />You make the decisions.
-              </h2>
-              <p style={{ color: 'var(--color-text-secondary)', marginTop: 16, lineHeight: 1.8 }}>
-                OPSPILOT AI never takes action on your behalf without your explicit approval. Every
-                suggested response, quotation, or follow-up is presented to you first — giving you
-                full transparency and control over what gets sent to your customers.
-              </p>
-              <div className="hitl-points">
-                {[
-                  'Review AI suggestions before anything is sent externally',
-                  'Edit or override any AI recommendation at any time',
-                  'Full audit trail of every approved or rejected action',
-                  'No emails, messages, or documents sent without your sign-off',
-                ].map((point) => (
-                  <div key={point} className="hitl-point">
-                    <span className="hitl-point-dot" />
-                    <p>{point}</p>
-                  </div>
-                ))}
+            <div className="dark-preview-main">
+              <div className="preview-header">
+                <div>
+                  <span className="preview-enq-id">Enquiry #ENQ-1024</span>
+                  <h3>Rahul Sharma</h3>
+                </div>
+                <span className="badge-ai-complete">AI Analysis Complete</span>
               </div>
-              <div style={{ marginTop: 32 }}>
-                <Link to="/register" className="btn btn-primary">
-                  Start for Free
-                </Link>
+
+              <div className="preview-grid-cards">
+                <div className="preview-card">
+                  <h5>Customer Details</h5>
+                  <p>Rahul Sharma (rahul@example.com)</p>
+                </div>
+                <div className="preview-card">
+                  <h5>Requirements</h5>
+                  <p>Restaurant website with online ordering</p>
+                </div>
+                <div className="preview-card">
+                  <h5>Priority & Budget</h5>
+                  <p>High Priority • ₹60,000 (6 weeks)</p>
+                </div>
+              </div>
+
+              <div className="preview-output-box">
+                <div className="box-title">Suggested Customer Response</div>
+                <p className="box-desc">"Hi Rahul, thank you for reaching out! We can certainly build your restaurant website with online ordering within 6 weeks..."</p>
+              </div>
+
+              <div className="preview-quotation-box">
+                <div className="quotation-header">
+                  <span>Quotation Proposal (₹60,000)</span>
+                  <span className="badge-pending-approval">PENDING APPROVAL</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Final CTA ────────────────────────────────────────── */}
-      <section className="cta-section">
-        <div className="container">
-          <h2 className="section-title">Ready to automate your enquiry workflow?</h2>
-          <p className="section-subtitle">
-            Join forward-thinking small businesses using OPSPILOT AI to respond faster,
-            miss nothing, and close more deals — all with human oversight built in.
-          </p>
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link to="/register" className="btn btn-primary btn-lg">
-              Get Started Free
-            </Link>
-            <a href="#features" className="btn btn-outline btn-lg">
-              Explore Features
-            </a>
+      {/* ── 7. HUMAN-IN-THE-LOOP SECTION ── */}
+      <section className="hitl-section">
+        <div className="lp-container">
+          <div className="section-header-center">
+            <span className="section-eyebrow">HUMAN CONTROL</span>
+            <h2>AI moves fast. Humans stay in control.</h2>
+            <p>OPSPILOT AI prepares the work. Your team makes the final decision.</p>
+          </div>
+
+          <div className="hitl-flow-card">
+            <div className="hitl-step purple">AI analyzes</div>
+            <span className="hitl-arrow">↓</span>
+            <div className="hitl-step purple">AI prepares response</div>
+            <span className="hitl-arrow">↓</span>
+            <div className="hitl-step purple">AI generates quotation</div>
+            <span className="hitl-arrow">↓</span>
+            <div className="hitl-step navy">Human reviews</div>
+            <span className="hitl-arrow">↓</span>
+            <div className="hitl-step navy highlight-border">Human approves</div>
+            <span className="hitl-arrow">↓</span>
+            <div className="hitl-step green">Action proceeds</div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 8. USE CASES ── */}
+      <section className="use-cases-section">
+        <div className="lp-container">
+          <div className="section-header-center">
+            <span className="section-eyebrow">USE CASES</span>
+            <h2>Built for teams that handle customer enquiries.</h2>
+          </div>
+
+          <div className="use-cases-grid">
+            {USE_CASES.map((uc) => (
+              <div key={uc.title} className="use-case-card">
+                <h3>{uc.title}</h3>
+                <p>{uc.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 9. SECURITY / TRUST ── */}
+      <section className="security-section">
+        <div className="lp-container">
+          <div className="section-header-center">
+            <span className="section-eyebrow">TRUST</span>
+            <h2>Automation with control.</h2>
+          </div>
+
+          <div className="trust-grid">
+            {TRUST_POINTS.map((tp) => (
+              <div key={tp.title} className="trust-card">
+                <span className="trust-icon">🛡️</span>
+                <h3>{tp.title}</h3>
+                <p>{tp.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 10. FINAL CTA ── */}
+      <section className="final-cta-section">
+        <div className="lp-container">
+          <div className="final-cta-box">
+            <h2>Ready to make your enquiry workflow smarter?</h2>
+            <p>Let OPSPILOT AI turn customer requests into structured, reviewable business actions.</p>
+            <div className="final-cta-buttons">
+              <Link to="/register" className="btn btn-primary btn-lg">
+                Get Started
+              </Link>
+              <Link to="/login" className="btn btn-outline btn-lg style-white">
+                Sign In
+              </Link>
+            </div>
           </div>
         </div>
       </section>

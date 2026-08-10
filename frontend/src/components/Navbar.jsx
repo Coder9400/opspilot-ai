@@ -15,47 +15,50 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className={`navbar${scrolled ? ' scrolled' : ''}`}>
-        <div className="container navbar-inner">
+      <header className={`lp-navbar ${scrolled ? 'scrolled' : ''}`}>
+        <div className="lp-container lp-navbar-inner">
           {/* Logo */}
-          <Link to="/" className="navbar-logo" onClick={closeMenu}>
-            <div className="logo-icon">O</div>
-            <span className="logo-text">
-              OPS<span>PILOT</span>&nbsp;AI
-            </span>
+          <Link to="/" className="lp-navbar-logo" onClick={closeMenu}>
+            <div className="auth-logo-icon" style={{ width: 34, height: 34, fontSize: 14 }}>OP</div>
+            <span className="lp-logo-text">OPSPILOT AI</span>
           </Link>
 
-          {/* Desktop nav links */}
-          <div className="navbar-nav">
+          {/* Desktop Navigation Links */}
+          <nav className="lp-navbar-links">
+            <a href="#product">Product</a>
+            <a href="#how-it-works">How It Works</a>
             <a href="#features">Features</a>
-            <a href="#how-it-works">How it works</a>
-            <a href="#human-approval">Human Approval</a>
-          </div>
+            <a href="#workflow">Workflow</a>
+            <a href="#about">About</a>
+          </nav>
 
-          {/* Desktop actions */}
-          <div className="navbar-actions">
-            <Link to="/login" className="btn btn-ghost btn-sm">Login</Link>
+          {/* Right Action CTAs */}
+          <div className="lp-navbar-actions">
+            <Link to="/login" className="btn btn-ghost btn-sm">Sign In</Link>
             <Link to="/register" className="btn btn-primary btn-sm">Get Started</Link>
-            {/* Mobile toggle */}
+            
+            {/* Mobile Hamburger Toggle */}
             <button
-              className="navbar-mobile-toggle"
-              aria-label="Toggle menu"
-              onClick={() => setMobileOpen((v) => !v)}
+              className="lp-mobile-toggle"
+              aria-label="Toggle Navigation"
+              onClick={() => setMobileOpen((prev) => !prev)}
             >
               {mobileOpen ? '✕' : '☰'}
             </button>
           </div>
         </div>
-      </nav>
+      </header>
 
-      {/* Mobile menu */}
-      <div className={`mobile-nav${mobileOpen ? ' open' : ''}`}>
+      {/* Mobile Drawer Navigation */}
+      <div className={`lp-mobile-menu ${mobileOpen ? 'open' : ''}`}>
+        <a href="#product" onClick={closeMenu}>Product</a>
+        <a href="#how-it-works" onClick={closeMenu}>How It Works</a>
         <a href="#features" onClick={closeMenu}>Features</a>
-        <a href="#how-it-works" onClick={closeMenu}>How it works</a>
-        <a href="#human-approval" onClick={closeMenu}>Human Approval</a>
-        <div className="divider" />
-        <Link to="/login" className="btn btn-ghost btn-sm" onClick={closeMenu}>Login</Link>
-        <Link to="/register" className="btn btn-primary btn-sm" onClick={closeMenu}>Get Started</Link>
+        <a href="#workflow" onClick={closeMenu}>Workflow</a>
+        <a href="#about" onClick={closeMenu}>About</a>
+        <div className="lp-mobile-divider" />
+        <Link to="/login" className="btn btn-outline btn-full" onClick={closeMenu}>Sign In</Link>
+        <Link to="/register" className="btn btn-primary btn-full" onClick={closeMenu}>Get Started</Link>
       </div>
     </>
   )

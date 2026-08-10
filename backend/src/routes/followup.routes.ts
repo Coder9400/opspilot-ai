@@ -94,9 +94,16 @@ router.patch('/:id', async (req: AuthRequest, res: Response, next: NextFunction)
       throw new Error(`Invalid status. Must be one of: ${allowedStatuses.join(', ')}`);
     }
 
+    const updateData: Record<string, any> = { status, updated_at: new Date().toISOString() };
+    if (status === 'COMPLETED') {
+      updateData.completed_at = new Date().toISOString();
+    } else {
+      updateData.completed_at = null;
+    }
+
     const { data: updated, error: updateErr } = await supabase
       .from('follow_ups')
-      .update({ status, updated_at: new Date().toISOString() })
+      .update(updateData)
       .eq('id', req.params.id as string)
       .select()
       .single();

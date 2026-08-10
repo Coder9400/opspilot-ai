@@ -1,35 +1,14 @@
 /**
- * ErrorBanner – inline API error display.
- *
- * Props:
- *   message: string
- *   onRetry: () => void  (optional)
+ * ErrorBanner — inline error message with optional retry action.
  */
-export default function ErrorBanner({ message, onRetry }) {
+export default function ErrorBanner({ message, onRetry, style }) {
   if (!message) return null
   return (
-    <div
-      className="form-error-banner"
-      role="alert"
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
-    >
-      <span>⚠️ {message}</span>
+    <div className="error-banner" role="alert" style={style}>
+      <span className="error-banner-icon">⚠️</span>
+      <span style={{ flex: 1 }}>{message}</span>
       {onRetry && (
-        <button
-          onClick={onRetry}
-          style={{
-            background: 'none',
-            border: '1px solid #fca5a5',
-            borderRadius: 6,
-            padding: '2px 10px',
-            fontSize: 'var(--font-size-xs)',
-            cursor: 'pointer',
-            color: '#991b1b',
-            flexShrink: 0,
-          }}
-        >
-          Retry
-        </button>
+        <button className="error-banner-retry" onClick={onRetry}>Retry</button>
       )}
     </div>
   )

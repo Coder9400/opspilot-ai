@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import Input from '../components/Input'
 import Button from '../components/Button'
@@ -28,9 +28,15 @@ function validate(fields) {
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login } = useAuth()
+  const { login, isAuthenticated } = useAuth()
 
   const from = location.state?.from?.pathname || '/dashboard'
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(from, { replace: true })
+    }
+  }, [isAuthenticated, navigate, from])
 
   const [fields, setFields] = useState({ email: '', password: '' })
   const [errors, setErrors] = useState({})
@@ -68,7 +74,7 @@ export default function Login() {
       <div className="auth-left">
         <div className="auth-left-content">
           <div className="auth-left-logo">
-            <div className="logo-icon">O</div>
+            <div className="logo-icon">OP</div>
             <div className="logo-text">OPSPILOT AI</div>
           </div>
           <h2 className="auth-left-heading">Your AI Workflow Autopilot for Small Business</h2>
