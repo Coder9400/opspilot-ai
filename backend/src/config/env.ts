@@ -23,9 +23,12 @@ export type AIProviderType = 'mistral' | 'mock';
 export const env = {
   SUPABASE_URL: requireEnv('SUPABASE_URL'),
   SUPABASE_ANON_KEY: requireEnv('SUPABASE_ANON_KEY'),
+  // Service role key — used for admin operations that bypass RLS (company creation during registration).
+  // Get it from: Supabase Dashboard → Settings → API → service_role key
+  SUPABASE_SERVICE_ROLE_KEY: optionalEnv('SUPABASE_SERVICE_ROLE_KEY', ''),
   MISTRAL_API_KEY: optionalEnv('MISTRAL_API_KEY', ''),
   AI_PROVIDER: optionalEnv('AI_PROVIDER', 'mistral') as AIProviderType,
-  PORT: parseInt(optionalEnv('PORT', '4000'), 10),
+  PORT: parseInt(optionalEnv('PORT', '5000'), 10),
   CLIENT_URL: optionalEnv('CLIENT_URL', 'http://localhost:5173'),
   NODE_ENV: optionalEnv('NODE_ENV', 'development'),
   isProduction: optionalEnv('NODE_ENV', 'development') === 'production',

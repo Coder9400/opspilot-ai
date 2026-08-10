@@ -1,7 +1,9 @@
-import { supabase } from '../config/supabase';
+import { createClient } from '@supabase/supabase-js';
+import { supabase, getAdminClient, rowToCamel } from '../config/supabase';
 import { RegisterInput, LoginInput } from '../validators/auth.validator';
 import { AuthError, ConflictError } from '../utils/errors';
 import { CompanyService } from './company.service';
+import { env } from '../config/env';
 
 // ─── Auth Service (Supabase Auth) ─────────────────────────────────────────────
 
@@ -24,10 +26,12 @@ export const AuthService = {
       password: input.password,
       options: {
         data: {
-          name: input.name,
-          fullName: input.name,
-          full_name: input.name,
-          businessName: (input as Record<string, unknown>).businessName ?? '',
+          name:         input.name,
+          fullName:     input.name,
+          full_name:    input.name,
+          companyType:  input.companyType,
+          companyName:  input.companyName,
+          businessName: input.companyName,
         },
       },
     });
@@ -43,14 +47,19 @@ export const AuthService = {
       throw new AuthError(error.message);
     }
 
-    if (!data.user || !data.session) {
+    if (!data.user) {
+      throw new AuthError('Registration failed — no user returned');
+    }
+
+    // Email confirmation is disabled in this project.
+    // If enabled, this branch handles it gracefully.
+    if (!data.session) {
       return {
         user: {
-          id: data.user?.id ?? '',
-          email: input.email,
-          name: input.name,
-          fullName: input.name,
-          businessName: (input as Record<string, unknown>).businessName ?? '',
+          id:          data.user.id,
+          email:       input.email,
+          name:        input.name,
+          companyType: input.companyType,
         },
         token: null,
         message: 'Registration successful. Please check your email to confirm your account.',
@@ -58,26 +67,64 @@ export const AuthService = {
       };
     }
 
+    const sessionToken = data.session.access_token;
+
+    // ── Create company using the authenticated client (respects RLS) ──────────
+    // We use the user's own session token so RLS policies allow the insert.
+    let company: Record<string, unknown> | null = null;
+    try {
+      company = await CompanyService.createCompany(
+        data.user.id,
+        {
+          name:             input.companyName || input.name + "'s Company",
+          type:             input.companyType,
+          email:            input.email,
+          city:             input.city,
+          state:            input.state,
+          country:          input.country,
+          website:          input.website,
+          industry:         input.industry,
+          businessCategory: input.businessCategory,
+        },
+        sessionToken
+      );
+    } catch (companyErr) {
+      console.error('[Auth] Company creation failed:', (companyErr as Error).message);
+      // Don't fail registration if company creation fails — user can retry
+    }
+
+    // ── Create supplier profile if applicable ──────────────────────────────────
+    if (input.companyType === 'SUPPLIER' && company) {
+      try {
+        const adminClient = getAdminClient();
+        const companyId = (company as any).id as string;
+
+        await adminClient.from('supplier_profiles').insert({
+          company_id:        companyId,
+          description:       input.description,
+          business_category: input.businessCategory,
+          service_areas:     input.serviceAreas
+            ? input.serviceAreas.split(',').map((s: string) => s.trim()).filter(Boolean)
+            : [],
+        });
+      } catch (profileErr) {
+        console.error('[Auth] Supplier profile creation failed:', (profileErr as Error).message);
+      }
+    }
+
     const meta = data.user.user_metadata ?? {};
     const fullName = extractName(meta) || input.name;
-    const businessName = (meta.businessName as string) ?? (input as Record<string, unknown>).businessName ?? '';
-
-    // Auto-create company for new user
-    try {
-      await CompanyService.ensureCompany(data.user.id, data.user.email ?? input.email, businessName || fullName);
-    } catch (companyErr) {
-      console.warn('[Auth] Company auto-create failed (non-fatal):', (companyErr as Error).message);
-    }
 
     return {
       user: {
-        id: data.user.id,
-        email: data.user.email ?? input.email,
-        name: fullName,
+        id:          data.user.id,
+        email:       data.user.email ?? input.email,
+        name:        fullName,
         fullName,
-        businessName,
+        companyType: input.companyType,
+        companyName: input.companyName,
       },
-      token: data.session.access_token,
+      token: sessionToken,
       requiresEmailConfirmation: false,
     };
   },
@@ -86,7 +133,7 @@ export const AuthService = {
 
   async login(input: LoginInput) {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: input.email,
+      email:    input.email,
       password: input.password,
     });
 
@@ -99,18 +146,17 @@ export const AuthService = {
     }
 
     const meta = data.user.user_metadata ?? {};
-    // Derive name from email prefix as fallback for users with no metadata
     const emailPrefix = input.email.split('@')[0];
     const fullName = extractName(meta) || emailPrefix;
-    const businessName = (meta.businessName as string) ?? '';
 
     return {
       user: {
-        id: data.user.id,
-        email: data.user.email ?? input.email,
-        name: fullName,
+        id:          data.user.id,
+        email:       data.user.email ?? input.email,
+        name:        fullName,
         fullName,
-        businessName,
+        companyType: (meta.companyType as string) ?? null,
+        companyName: (meta.companyName as string) ?? (meta.businessName as string) ?? '',
       },
       token: data.session.access_token,
     };
@@ -127,12 +173,31 @@ export const AuthService = {
     const emailPrefix = (data.user.email ?? '').split('@')[0];
     const fullName = extractName(meta) || emailPrefix;
 
+    // Load company + membership for this user
+    let company: Record<string, unknown> | null = null;
+    let companyType: string | null = null;
+    let companyRole: string | null = null;
+
+    try {
+      const memberRecord = await CompanyService.getMemberRecord(userId);
+      if (memberRecord) {
+        company = await CompanyService.getCompanyById(memberRecord.companyId);
+        companyType = (company?.type as string) ?? null;
+        companyRole = memberRecord.role;
+      }
+    } catch (err) {
+      console.warn('[Auth.me] Company lookup failed (non-fatal):', (err as Error).message);
+    }
+
     return {
       id: data.user.id,
       email: data.user.email ?? '',
       name: fullName,
       fullName,
-      businessName: (meta.businessName as string) ?? '',
+      companyType: companyType ?? (meta.companyType as string) ?? null,
+      companyName: (company?.name as string) ?? (meta.companyName as string) ?? '',
+      company,
+      companyRole,
     };
   },
 };

@@ -1,10 +1,10 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import ws from 'ws';
 import { env } from './env';
 
-// ─── Supabase Client ──────────────────────────────────────────────────────────
-// Single instance with anon key. Backend routes verify Supabase JWTs and
-// pass user identity through req.user. For production, swap to service_role key.
+// ─── Default Supabase Client (anon key) ───────────────────────────────────────
+// Used for auth verification (supabase.auth.getUser) and non-RLS-sensitive reads.
+// Backend business logic enforces authorization — RLS acts as secondary safety net.
 
 export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
   auth: {
@@ -17,6 +17,55 @@ export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
   },
 });
 
+// ─── Admin Client (service role key) ─────────────────────────────────────────
+// Bypasses RLS. Use ONLY for trusted server-side operations where the backend
+// has already verified authorization (e.g., company creation during registration).
+// Falls back to anon client if service role key is not configured.
+
+let _adminClient: SupabaseClient | null = null;
+
+export function getAdminClient(): SupabaseClient {
+  if (_adminClient) return _adminClient;
+  if (env.SUPABASE_SERVICE_ROLE_KEY) {
+    _adminClient = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
+      realtime: { transport: ws as any },
+    });
+    console.log('[Supabase] Admin client initialized with service role key');
+  } else {
+    console.warn(
+      '[Supabase] SUPABASE_SERVICE_ROLE_KEY not set — using anon key for admin operations.\n' +
+      '           Add it to .env to enable proper RLS bypass for server operations.'
+    );
+    _adminClient = supabase;
+  }
+  return _adminClient;
+}
+
+// ─── Per-Request Authenticated Client ────────────────────────────────────────
+// Creates a Supabase client authenticated with the user's JWT.
+// RLS policies (auth.uid()) work correctly with this client.
+// Use this for user-specific database operations when direct DB access is needed.
+
+export function createAuthenticatedClient(token: string): SupabaseClient {
+  return createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  });
+}
+
 // ─── DB Error Utilities ───────────────────────────────────────────────────────
 
 import { NotFoundError, AppError } from '../utils/errors';
@@ -28,8 +77,10 @@ export function assertNoDbError(
   if (!error) return;
   console.error(`[DB] ${context}: ${error.code} — ${error.message}`);
   if (error.code === '42P01') throw new NotFoundError(context); // table not found
-  if (error.code === '22P02') throw new AppError('INVALID_ID', `Invalid ID format provided`, 400); // invalid UUID
-  if (error.code === 'PGRST116') throw new NotFoundError(context); // PostgREST not found (single row, no result)
+  if (error.code === '22P02') throw new AppError('INVALID_ID', `Invalid ID format provided`, 400);
+  if (error.code === 'PGRST116') throw new NotFoundError(context); // PostgREST not found
+  if (error.code === '23503') throw new AppError('REFERENCE_ERROR', `${context}: Referenced record does not exist`, 400);
+  if (error.code === '23505') throw new AppError('CONFLICT', `${context}: A record with this data already exists`, 409);
   throw new AppError('DB_ERROR', `${context}: ${error.message}`, 500);
 }
 
@@ -46,7 +97,6 @@ export function rowToCamel<T = Record<string, unknown>>(
   for (const key of Object.keys(row)) {
     const camelKey = snakeToCamel(key);
     const value = row[key];
-    // Recursively convert nested arrays/objects (for relations)
     if (Array.isArray(value)) {
       result[camelKey] = value.map((v) =>
         v && typeof v === 'object' ? rowToCamel(v as Record<string, unknown>) : v

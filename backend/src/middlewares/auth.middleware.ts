@@ -1,12 +1,14 @@
 import { Response, NextFunction } from 'express';
-import { supabase } from '../config/supabase';
+import { supabase, createAuthenticatedClient } from '../config/supabase';
 import { AuthRequest, AuthenticatedUser } from '../types';
 import { AuthError } from '../utils/errors';
 
 /**
  * Verifies the Supabase JWT from the Authorization header.
- * On success, populates req.user with { id, email, name }.
- * Uses supabase.auth.getUser() — the recommended server-side token verification.
+ * On success:
+ *   - populates req.user with { id, email, name }
+ *   - populates req.dbClient with a per-request authenticated Supabase client
+ *     (RLS policies using auth.uid() work correctly with this client)
  */
 export async function authenticate(
   req: AuthRequest,
@@ -35,5 +37,7 @@ export async function authenticate(
   };
 
   req.user = authenticatedUser;
+  // Attach a per-request authenticated client — enables RLS to function with auth.uid()
+  req.dbClient = createAuthenticatedClient(token);
   next();
 }

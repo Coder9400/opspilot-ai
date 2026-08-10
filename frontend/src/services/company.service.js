@@ -1,10 +1,17 @@
 import { request } from './api'
 
 export const companyService = {
-  get: () => request('GET', '/api/company'),
-  create: (data) => request('POST', '/api/company', data),
-  update: (data) => request('PUT', '/api/company', data),
-  getMembers: () => request('GET', '/api/company/members'),
+  /** GET /api/companies/me — returns { company, role } */
+  get: () => request('GET', '/api/companies/me'),
+
+  /** POST /api/companies — create a company */
+  create: (data) => request('POST', '/api/companies', data),
+
+  /** PUT /api/companies/me — update company profile */
+  update: (data) => request('PUT', '/api/companies/me', data),
+
+  /** GET /api/companies/me/members */
+  getMembers: () => request('GET', '/api/companies/me/members'),
 }
 
 export default companyService
