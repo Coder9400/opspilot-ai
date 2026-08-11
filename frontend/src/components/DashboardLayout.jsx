@@ -5,12 +5,13 @@ import { useAuth } from '../hooks/useAuth'
 // ─── Navigation definitions per company type ──────────────────────────────────
 
 const CUSTOMER_NAV = [
-  { id: 'dashboard', label: 'Dashboard',    icon: '📊', href: '/dashboard' },
-  { id: 'projects',  label: 'Projects',     icon: '🏗️', href: '/projects' },
-  { id: 'rfqs',      label: 'My RFQs',      icon: '📋', href: '/rfqs',      soon: true },
-  { id: 'quotations',label: 'Quotations',   icon: '📄', href: '/quotations', soon: true },
-  { id: 'suppliers', label: 'Suppliers',    icon: '🏭', href: '/suppliers',  soon: true },
-  { id: 'settings',  label: 'Settings',     icon: '⚙️', href: '/company/settings' },
+  { id: 'dashboard',    label: 'Dashboard',    icon: '📊', href: '/dashboard' },
+  { id: 'projects',    label: 'Projects',     icon: '🏗️', href: '/projects' },
+  { id: 'procurement', label: 'Procurement',  icon: '📋', href: '/procurement-requests' },
+  { id: 'rfqs',        label: 'My RFQs',      icon: '📄', href: '/rfqs',      soon: true },
+  { id: 'quotations',  label: 'Quotations',   icon: '📃', href: '/quotations', soon: true },
+  { id: 'suppliers',   label: 'Suppliers',    icon: '🏭', href: '/suppliers',  soon: true },
+  { id: 'settings',   label: 'Settings',     icon: '⚙️', href: '/company/settings' },
 ]
 
 const SUPPLIER_NAV = [

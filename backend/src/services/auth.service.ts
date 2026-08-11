@@ -149,6 +149,38 @@ export const AuthService = {
     const emailPrefix = input.email.split('@')[0];
     const fullName = extractName(meta) || emailPrefix;
 
+    // ── Auto-heal: recreate company if missing ──────────────────────────────
+    // Some users registered successfully but their company creation silently
+    // failed (e.g. DB schema was not yet migrated). On every login, check if
+    // the user has a company_members row; if not, recreate from stored metadata.
+    // createCompany() is idempotent — returns existing company if already exists.
+    try {
+      const existingMember = await CompanyService.getMemberRecord(data.user.id);
+      if (!existingMember) {
+        // Fallback to email prefix if companyName not stored in metadata
+        const companyName =
+          (meta.companyName as string) ||
+          (meta.businessName as string) ||
+          (meta.name as string) ||
+          (emailPrefix + "'s Company");
+        const companyType = (meta.companyType as string) || 'CUSTOMER';
+        console.log(`[Auth] Orphan user detected — auto-healing company for ${input.email}`);
+        await CompanyService.createCompany(
+          data.user.id,
+          {
+            name:    companyName,
+            type:    companyType,
+            email:   data.user.email ?? input.email,
+            country: 'India',
+          }
+        );
+        console.log(`[Auth] Company auto-created: "${companyName}" (${companyType}) for ${input.email}`);
+      }
+    } catch (healErr) {
+      // Non-fatal — user can create company from the dashboard
+      console.warn('[Auth] Company auto-heal failed (non-fatal):', (healErr as Error).message);
+    }
+
     return {
       user: {
         id:          data.user.id,
@@ -179,7 +211,37 @@ export const AuthService = {
     let companyRole: string | null = null;
 
     try {
-      const memberRecord = await CompanyService.getMemberRecord(userId);
+      let memberRecord = await CompanyService.getMemberRecord(userId);
+
+      // ── Auto-heal: create company if user has none ───────────────────────
+      // Users with a stored token bypass the login form, so the login auto-heal
+      // never fires. Check here too — createCompany() is idempotent.
+      if (!memberRecord) {
+        const companyName =
+          (meta.companyName as string) ||
+          (meta.businessName as string) ||
+          (meta.name as string) ||
+          (emailPrefix + "'s Company");
+        const ct = (meta.companyType as string) || 'CUSTOMER';
+        console.log(`[Auth.me] Orphan user — auto-healing company for ${data.user.email}`);
+        try {
+          await CompanyService.createCompany(
+            userId,
+            {
+              name:    companyName,
+              type:    ct,
+              email:   data.user.email ?? '',
+              country: 'India',
+            }
+          );
+          // Re-fetch after creation
+          memberRecord = await CompanyService.getMemberRecord(userId);
+          console.log(`[Auth.me] Company auto-created: "${companyName}" (${ct})`);
+        } catch (healErr) {
+          console.warn('[Auth.me] Company auto-heal failed:', (healErr as Error).message);
+        }
+      }
+
       if (memberRecord) {
         company = await CompanyService.getCompanyById(memberRecord.companyId);
         companyType = (company?.type as string) ?? null;

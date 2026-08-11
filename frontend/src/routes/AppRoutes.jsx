@@ -35,6 +35,15 @@ import ReceivedQuotationDetail from '../pages/ReceivedQuotations/ReceivedQuotati
 import Settings                from '../pages/Settings'
 import Approvals               from '../pages/Approvals'
 
+// ─── Phase 2 — Procurement ────────────────────────────────────────────────────
+import ProcurementRequestsPage   from '../pages/ProcurementRequests'
+import CreateProcurementRequest   from '../pages/ProcurementRequests/CreateRequest'
+import RequestDetail              from '../pages/ProcurementRequests/RequestDetail'
+import RequestRFQRedirect         from '../pages/ProcurementRequests/RequestRFQRedirect'
+import RFQDetail                  from '../pages/RFQ/RFQDetail'
+import EditRFQ                    from '../pages/RFQ/EditRFQ'
+import RFQSuccess                 from '../pages/RFQ/RFQSuccess'
+
 function P({ children }) {
   return <ProtectedRoute>{children}</ProtectedRoute>
 }
@@ -63,6 +72,17 @@ export default function AppRoutes() {
 
         {/* ── Shared: Company settings ── */}
         <Route path="/company/settings" element={<P><CompanySettings /></P>} />
+
+        {/* ── Phase 2: Procurement Requests ── */}
+        <Route path="/procurement-requests"         element={<P><ProcurementRequestsPage /></P>} />
+        <Route path="/procurement-requests/new"    element={<P><CreateProcurementRequest /></P>} />
+        <Route path="/procurement-requests/:id"    element={<P><RequestDetail /></P>} />
+        <Route path="/procurement-requests/:id/rfq" element={<P><RequestRFQRedirect /></P>} />
+
+        {/* ── Phase 2: RFQs ── */}
+        <Route path="/rfqs/:id"         element={<P><RFQDetail /></P>} />
+        <Route path="/rfqs/:id/edit"    element={<P><EditRFQ /></P>} />
+        <Route path="/rfqs/:id/success" element={<P><RFQSuccess /></P>} />
 
         {/* ── Legacy (Phase 2+) — preserved for reuse ── */}
         <Route path="/enquiries"            element={<P><Enquiries /></P>} />

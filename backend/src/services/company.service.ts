@@ -46,6 +46,7 @@ export const CompanyService = {
     }
 
     const insertData: Record<string, unknown> = {
+      owner_id:   userId,           // NOT NULL in existing schema
       name:       data.name,
       type:       data.type ?? 'CUSTOMER',
       email:      data.email ?? null,
@@ -98,7 +99,12 @@ export const CompanyService = {
   // ── Get member record (fast) ───────────────────────────────────────────────
 
   async getMemberRecord(userId: string): Promise<{ companyId: string; role: string } | null> {
-    const { data, error } = await supabase
+    // IMPORTANT: Use admin client here — the anon client has no auth.uid() context on the
+    // backend, so RLS policies (which check auth.uid()) would block this query and return
+    // null for every user. The admin client bypasses RLS safely because the auth middleware
+    // has already verified the user's JWT before this function is called.
+    const adminClient = getAdminClient();
+    const { data, error } = await adminClient
       .from('company_members')
       .select('company_id, role')
       .eq('user_id', userId)
@@ -116,7 +122,11 @@ export const CompanyService = {
   // ── Get company by ID ──────────────────────────────────────────────────────
 
   async getCompanyById(companyId: string) {
-    const { data, error } = await supabase
+    // IMPORTANT: Use admin client — same reason as getMemberRecord. The anon client
+    // cannot read companies because RLS requires auth.uid() to match a company_member.
+    // The admin client is safe here: caller has already verified the user belongs to this company.
+    const adminClient = getAdminClient();
+    const { data, error } = await adminClient
       .from('companies')
       .select('*')
       .eq('id', companyId)

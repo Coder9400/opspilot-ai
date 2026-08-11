@@ -13,6 +13,9 @@ import companyRoutes  from './routes/company.routes';
 import projectRoutes  from './routes/project.routes';
 import supplierRoutes from './routes/supplier.routes';
 
+// Phase 2 — Procurement
+import { procurementRouter, rfqRouter } from './routes/procurement.routes';
+
 // Legacy — preserved for Phase 2+ reuse (not exposed in new nav)
 import enquiryRoutes           from './routes/enquiry.routes';
 import quotationRoutes         from './routes/quotation.routes';
@@ -68,6 +71,11 @@ app.use('/api/suppliers', supplierRoutes);
 
 // Legacy compatibility alias — frontend currently calls /api/company
 app.use('/api/company', companyRoutes);
+
+// ─── Phase 2 Routes ──────────────────────────────────────────────────────────
+
+app.use('/api/procurement-requests', procurementRouter);
+app.use('/api/rfqs',                 rfqRouter);
 
 // ─── Legacy Routes (Phase 2+ reuse) ──────────────────────────────────────────
 
